@@ -8,7 +8,7 @@
     <script>
         (function () {
             var t = null;
-            try {t = localStorage.getItem('diadejogo-tema');} catch (e) { }
+            try { t = localStorage.getItem('diadejogo-tema'); } catch (e) { }
             if (!t) t = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'escuro' : 'claro';
             document.documentElement.dataset.theme = t;
         })();
@@ -417,42 +417,48 @@
     </main>
 
     <script type="module">
-        import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-        import {getFirestore, collection, doc, onSnapshot, setDoc, deleteDoc, getDoc, writeBatch} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-        import {getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getFirestore, collection, doc, onSnapshot, setDoc, deleteDoc, getDoc, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+        import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
         /* ========== CONFIGURAÇÃO DO FIREBASE (cole os dados do seu projeto) ========== */
         const firebaseConfig = {
-            apiKey: "",
-            authDomain: "",
-            projectId: "",
-            storageBucket: "",
-            messagingSenderId: "",
-            appId: ""
+            apiKey: "AIzaSyDxRoa5LA8yK68GjnV0ADUkpDitZZPSRDs",
+            authDomain: "://firebaseapp.com",
+            projectId: "futglass",
+            storageBucket: "futglass.firebasestorage.app",
+            messagingSenderId: "477353498381",
+            appId: "1:477353498381:web:8e1e8d442715fa65360244"
         };
+
+        // Inicializa o Firebase
+        const app = initializeApp(firebaseConfig);
+
+        // EXPORTAR O DB É FUNDAMENTAL: Sem isso você não consegue ler ou salvar dados
+        export const db = getFirestore(app);
 
         /* ========== Constantes ========== */
         const TEAMS = ['YELLOW', 'BLUE', 'RED'];
-        const NOME = {YELLOW: 'AMARELO', BLUE: 'AZUL', RED: 'VERMELHO'};
-        const RES = {W: 'V', D: 'E', L: 'D'};
+        const NOME = { YELLOW: 'AMARELO', BLUE: 'AZUL', RED: 'VERMELHO' };
+        const RES = { W: 'V', D: 'E', L: 'D' };
         const DIAS_ALEATORIO = 45;
-        const PADRAO = {teamSize: 6, pairMemory: 8, watchWindow: 5, minGames: 3};
+        const PADRAO = { teamSize: 6, pairMemory: 8, watchWindow: 5, minGames: 3 };
 
         const $ = s => document.querySelector(s);
-        const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+        const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
         const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
         /* ========== Tema ========== */
         function aplicarTema(t) {
             document.documentElement.dataset.theme = t;
-            try {localStorage.setItem('diadejogo-tema', t);} catch (e) { }
+            try { localStorage.setItem('diadejogo-tema', t); } catch (e) { }
             $('#themeBtn').textContent = t === 'escuro' ? 'Tema claro' : 'Tema escuro';
         }
         aplicarTema(document.documentElement.dataset.theme);
 
         /* ========== Estado ========== */
-        let state = {settings: {...PADRAO}, players: [], days: [], matches: []};
-        const loaded = {players: false, days: false, matches: false, config: false};
+        let state = { settings: { ...PADRAO }, players: [], days: [], matches: [] };
+        const loaded = { players: false, days: false, matches: false, config: false };
         let loadError = null, authUser = null, isAdmin = false, authMsg = '';
         let view = 'teams', openDay = null, rankTab = 'goals';
 
@@ -466,11 +472,11 @@
         const auth = getAuth(fb);
 
         ['players', 'days', 'matches'].forEach(col => onSnapshot(collection(db, col),
-            snap => {state[col] = snap.docs.map(d => ({...d.data(), id: d.id})); loaded[col] = true; render();},
-            err => {loadError = err.code || err.message; render();}));
+            snap => { state[col] = snap.docs.map(d => ({ ...d.data(), id: d.id })); loaded[col] = true; render(); },
+            err => { loadError = err.code || err.message; render(); }));
         onSnapshot(doc(db, 'config', 'settings'),
-            snap => {state.settings = {...PADRAO, ...(snap.exists() ? snap.data() : {})}; loaded.config = true; render();},
-            err => {loadError = err.code || err.message; render();});
+            snap => { state.settings = { ...PADRAO, ...(snap.exists() ? snap.data() : {}) }; loaded.config = true; render(); },
+            err => { loadError = err.code || err.message; render(); });
 
         onAuthStateChanged(auth, async user => {
             authUser = user; isAdmin = false; authMsg = '';
@@ -479,7 +485,7 @@
                     const s = await getDoc(doc(db, 'admins', user.uid));
                     isAdmin = s.exists();
                     if (!isAdmin) authMsg = 'Este usuário não tem permissão de administrador.';
-                } catch (e) {authMsg = 'Não foi possível verificar a permissão de administrador.';}
+                } catch (e) { authMsg = 'Não foi possível verificar a permissão de administrador.'; }
             }
             render();
         });
@@ -496,7 +502,7 @@
                     ops.slice(i, i + 450).forEach(([tipo, col, o]) => tipo === 'set' ? b.set(doc(db, col, o.id), limpo(o)) : b.delete(doc(db, col, o)));
                     await b.commit();
                 }
-            } catch (e) {falha(e);}
+            } catch (e) { falha(e); }
         }
 
         /* ========== Utilidades ========== */
@@ -505,8 +511,8 @@
         const pname = id => P(id)?.name || 'Desconhecido';
         const dayById = id => state.days.find(d => d.id === id);
         const curDay = () => dayById(openDay);
-        const todayStr = () => {const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');};
-        const fmtDate = s => new Date(s + 'T00:00').toLocaleDateString('pt-BR', {weekday: 'short', day: '2-digit', month: 'short', year: 'numeric'});
+        const todayStr = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+        const fmtDate = s => new Date(s + 'T00:00').toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
         const sortedDays = () => state.days.slice().sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')));
         const dayMatches = dayId => state.matches.filter(m => m.dayId === dayId).sort((a, b) => a.created - b.created);
         const pct = x => Math.round(x * 100) + '%';
@@ -514,27 +520,27 @@
         const teamLabel = t => dot(t) + NOME[t];
         const modeLabel = m => m === 'balanced' ? 'Balanceado por estatísticas' : 'Aleatório';
 
-        function shuffle(a) {for (let i = a.length - 1; i > 0; i--) {const j = Math.floor(Math.random() * (i + 1));[a[i], a[j]] = [a[j], a[i]];} return a;}
-        function roster(day, team) {if (!day.teams) return []; const r = day.teams[team].slice(); const gk = day.gk && day.gk[team]; if (gk) r.unshift(gk); return r;}
-        function score(m) {return [m.events.filter(e => e.team === m.home).length, m.events.filter(e => e.team === m.away).length];}
-        function currentGKs() {const g = {}; TEAMS.forEach(t => {const p = state.players.find(x => x.pos === 'GK' && x.active && x.team === t); g[t] = p ? p.id : null;}); return g;}
+        function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1));[a[i], a[j]] = [a[j], a[i]]; } return a; }
+        function roster(day, team) { if (!day.teams) return []; const r = day.teams[team].slice(); const gk = day.gk && day.gk[team]; if (gk) r.unshift(gk); return r; }
+        function score(m) { return [m.events.filter(e => e.team === m.home).length, m.events.filter(e => e.team === m.away).length]; }
+        function currentGKs() { const g = {}; TEAMS.forEach(t => { const p = state.players.find(x => x.pos === 'GK' && x.active && x.team === t); g[t] = p ? p.id : null; }); return g; }
         function dayStatus(d) {
             const n = state.matches.filter(m => m.dayId === d.id && m.done).length;
             return n ? `${n} partida${n > 1 ? 's' : ''} jogada${n > 1 ? 's' : ''}` : d.teams ? 'Times sorteados' : 'Agendado';
         }
 
         /* ========== Rodízio: quem ganha fica ========== */
-        function streakOf(ms, idx, t) {let n = 0; for (let i = idx; i >= 0; i--) {if (ms[i].home === t || ms[i].away === t) n++; else break;} return n;}
+        function streakOf(ms, idx, t) { let n = 0; for (let i = idx; i >= 0; i--) { if (ms[i].home === t || ms[i].away === t) n++; else break; } return n; }
         function plano(m) {
             const ms = dayMatches(m.dayId), idx = ms.findIndex(x => x.id === m.id);
             const [h, a] = score(m), waiting = TEAMS.find(t => t !== m.home && t !== m.away);
-            if (h !== a) {const stay = h > a ? m.home : m.away; return {stay, leave: stay === m.home ? m.away : m.home, waiting, motivo: 'vitória'};}
+            if (h !== a) { const stay = h > a ? m.home : m.away; return { stay, leave: stay === m.home ? m.away : m.home, waiting, motivo: 'vitória' }; }
             const sh = streakOf(ms, idx, m.home), sa = streakOf(ms, idx, m.away);
-            if (sh === sa) return {tie: true, waiting};
+            if (sh === sa) return { tie: true, waiting };
             const leave = sh > sa ? m.home : m.away;
-            return {stay: leave === m.home ? m.away : m.home, leave, waiting, motivo: 'empate'};
+            return { stay: leave === m.home ? m.away : m.home, leave, waiting, motivo: 'empate' };
         }
-        function novaPartida(dayId, home, away) {return {id: uid(), dayId, home, away, events: [], done: false, created: Date.now()};}
+        function novaPartida(dayId, home, away) { return { id: uid(), dayId, home, away, events: [], done: false, created: Date.now() }; }
         function canReopen(m, ms) {
             const idx = ms.findIndex(x => x.id === m.id);
             if (!m.done) return false;
@@ -546,7 +552,7 @@
         /* ========== Estatísticas ========== */
         function computeStats() {
             const s = {};
-            state.players.forEach(p => s[p.id] = {id: p.id, name: p.name, pos: p.pos, active: p.active, games: 0, w: 0, d: 0, l: 0, goals: 0, assists: 0, log: []});
+            state.players.forEach(p => s[p.id] = { id: p.id, name: p.name, pos: p.pos, active: p.active, games: 0, w: 0, d: 0, l: 0, goals: 0, assists: 0, log: [] });
             const order = {}; sortedDays().forEach((d, i) => order[d.id] = i);
             state.matches
                 .filter(m => m.done && dayById(m.dayId)?.teams)
@@ -554,12 +560,12 @@
                 .forEach(m => {
                     const day = dayById(m.dayId), [hg, ag] = score(m), ga = {};
                     m.events.forEach(e => {
-                        if (s[e.scorer]) {s[e.scorer].goals++; ga[e.scorer] = (ga[e.scorer] || 0) + 1;}
-                        if (e.assist && s[e.assist]) {s[e.assist].assists++; ga[e.assist] = (ga[e.assist] || 0) + 1;}
+                        if (s[e.scorer]) { s[e.scorer].goals++; ga[e.scorer] = (ga[e.scorer] || 0) + 1; }
+                        if (e.assist && s[e.assist]) { s[e.assist].assists++; ga[e.assist] = (ga[e.assist] || 0) + 1; }
                     });
                     [[m.home, hg, ag], [m.away, ag, hg]].forEach(([t, f, a]) => {
                         const r = f > a ? 'W' : f < a ? 'L' : 'D';
-                        roster(day, t).forEach(id => {const x = s[id]; if (!x) return; x.games++; x[r.toLowerCase()]++; x.log.push({r, ga: ga[id] || 0});});
+                        roster(day, t).forEach(id => { const x = s[id]; if (!x) return; x.games++; x[r.toLowerCase()]++; x.log.push({ r, ga: ga[id] || 0 }); });
                     });
                 });
             return s;
@@ -571,12 +577,12 @@
             const contrib = (x.goals + 0.7 * x.assists) / (x.games + K);
             return base + 0.4 * contrib;
         }
-        function strength(day, t, st) {const r = roster(day, t); return r.length ? r.reduce((a, id) => a + rating(st[id]), 0) / r.length : 0;}
+        function strength(day, t, st) { const r = roster(day, t); return r.length ? r.reduce((a, id) => a + rating(st[id]), 0) / r.length : 0; }
 
         /* ========== Sorteio ========== */
-        function firstPlayed() {return state.matches.filter(m => m.done).map(m => dayById(m.dayId)?.date).filter(Boolean).sort()[0] || null;}
-        function daysSince(date) {return Math.floor((new Date(todayStr() + 'T00:00') - new Date(date + 'T00:00')) / 864e5);}
-        function currentMode() {const f = firstPlayed(); return f && daysSince(f) >= DIAS_ALEATORIO ? 'balanced' : 'random';}
+        function firstPlayed() { return state.matches.filter(m => m.done).map(m => dayById(m.dayId)?.date).filter(Boolean).sort()[0] || null; }
+        function daysSince(date) { return Math.floor((new Date(todayStr() + 'T00:00') - new Date(date + 'T00:00')) / 864e5); }
+        function currentMode() { const f = firstPlayed(); return f && daysSince(f) >= DIAS_ALEATORIO ? 'balanced' : 'random'; }
         function modeInfo() {
             const f = firstPlayed();
             if (!f) return `Próximo sorteio: aleatório. O período aleatório dura ${DIAS_ALEATORIO} dias a partir da primeira partida registrada.`;
@@ -588,10 +594,10 @@
         function pairCounts(excludeId) {
             const c = {};
             sortedDays().filter(d => d.teams && d.id !== excludeId).slice(-state.settings.pairMemory).forEach(d =>
-                TEAMS.forEach(t => {const a = d.teams[t]; for (let i = 0; i < a.length; i++) for (let j = i + 1; j < a.length; j++) {const k = pk(a[i], a[j]); c[k] = (c[k] || 0) + 1;} }));
+                TEAMS.forEach(t => { const a = d.teams[t]; for (let i = 0; i < a.length; i++) for (let j = i + 1; j < a.length; j++) { const k = pk(a[i], a[j]); c[k] = (c[k] || 0) + 1; } }));
             return c;
         }
-        function deal(ids) {const t = {YELLOW: [], BLUE: [], RED: []}; ids.forEach((id, i) => t[TEAMS[i % 3]].push(id)); return t;}
+        function deal(ids) { const t = { YELLOW: [], BLUE: [], RED: [] }; ids.forEach((id, i) => t[TEAMS[i % 3]].push(id)); return t; }
         function balancedSplit(ids, dayId, gk) {
             const st = computeStats(), r = {}, gr = {};
             ids.forEach(id => r[id] = rating(st[id]));
@@ -600,7 +606,7 @@
             const cost = t => {
                 const sums = TEAMS.map(x => t[x].reduce((a, id) => a + r[id], 0) + gr[x]);
                 let rep = 0;
-                TEAMS.forEach(x => {const a = t[x]; for (let i = 0; i < a.length; i++) for (let j = i + 1; j < a.length; j++) rep += pc[pk(a[i], a[j])] || 0;});
+                TEAMS.forEach(x => { const a = t[x]; for (let i = 0; i < a.length; i++) for (let j = i + 1; j < a.length; j++) rep += pc[pk(a[i], a[j])] || 0; });
                 return (Math.max(...sums) - Math.min(...sums)) * 10 + rep * 0.5;
             };
             let best = null, bc = Infinity;
@@ -614,11 +620,11 @@
                         for (let i = 0; i < A.length; i++) for (let j = 0; j < B.length; j++) {
                             [A[i], B[j]] = [B[j], A[i]];
                             const nc = cost(t);
-                            if (nc < c - 1e-9) {c = nc; improved = true;} else {[A[i], B[j]] = [B[j], A[i]];}
+                            if (nc < c - 1e-9) { c = nc; improved = true; } else { [A[i], B[j]] = [B[j], A[i]]; }
                         }
                     }
                 }
-                if (c < bc) {bc = c; best = t;}
+                if (c < bc) { bc = c; best = t; }
             }
             return best;
         }
@@ -683,11 +689,11 @@
             const st = Object.values(computeStats()).filter(x => x.games > 0), min = state.settings.minGames;
             const tabs = [['goals', 'Gols'], ['assists', 'Assistências'], ['ga', 'Gols + Assistências'], ['win', 'Taxa de vitórias']];
             let rows;
-            if (rankTab === 'win') rows = st.filter(x => x.games >= min).map(x => ({...x, v: x.w / x.games})).sort((a, b) => b.v - a.v || b.games - a.games);
-            else rows = st.map(x => ({...x, v: rankTab === 'goals' ? x.goals : rankTab === 'assists' ? x.assists : x.goals + x.assists}))
+            if (rankTab === 'win') rows = st.filter(x => x.games >= min).map(x => ({ ...x, v: x.w / x.games })).sort((a, b) => b.v - a.v || b.games - a.games);
+            else rows = st.map(x => ({ ...x, v: rankTab === 'goals' ? x.goals : rankTab === 'assists' ? x.assists : x.goals + x.assists }))
                 .filter(x => x.v > 0).sort((a, b) => b.v - a.v || a.games - b.games || a.name.localeCompare(b.name));
             let rank = 0, prev = null;
-            rows.forEach((x, i) => {if (x.v !== prev) {rank = i + 1; prev = x.v;} x.rank = rank;});
+            rows.forEach((x, i) => { if (x.v !== prev) { rank = i + 1; prev = x.v; } x.rank = rank; });
             const on = k => rankTab === k ? 'on' : '';
             return `<h2>Rankings</h2><p class="sub">Considera apenas partidas encerradas.${rankTab === 'win' ? ` Mínimo de ${min} jogos.` : ''}</p>
   <div class="tabs">${tabs.map(([k, l]) => `<button data-tab="${k}" class="${rankTab === k ? 'active' : ''}">${l}</button>`).join('')}</div>
@@ -707,7 +713,7 @@
                 if (streak >= 3) flags.push(`${streak} derrotas seguidas`);
                 if (rate < 0.25) flags.push('Baixa taxa de vitórias recente');
                 if (ga === 0 && last.length >= N) flags.push(`Sem gols ou assistências nos últimos ${N} jogos`);
-                return {...x, last, rate, ga, flags, ppg: (3 * w + d) / last.length};
+                return { ...x, last, rate, ga, flags, ppg: (3 * w + d) / last.length };
             }).sort((a, b) => b.flags.length - a.flags.length || a.ppg - b.ppg);
             const flagged = rows.filter(r => r.flags.length).length;
             return `<h2>Em observação</h2><p class="sub">Desempenho recente nos últimos ${N} jogos. O jogador é sinalizado com 3 ou mais derrotas seguidas, taxa de vitórias recente abaixo de 25% ou nenhum gol ou assistência nos últimos ${N} jogos. Considera jogadores de linha com pelo menos ${s.minGames} jogos.</p>
@@ -774,7 +780,7 @@
         <button class="btn ghost" data-act="leave" data-mid="${last.id}" data-team="${last.away}">Sai ${NOME[last.away]}</button></div>`;
                 } else if (!live) {
                     let dh = 'YELLOW', da = 'BLUE';
-                    if (last && last.done) {const p = plano(last); dh = p.stay; da = p.waiting;}
+                    if (last && last.done) { const p = plano(last); dh = p.stay; da = p.waiting; }
                     h += `<div class="row"><select id="mHome">${TEAMS.map(t => `<option value="${t}" ${t === dh ? 'selected' : ''}>${NOME[t]}</option>`).join('')}</select><span class="tag">x</span>
         <select id="mAway">${TEAMS.map(t => `<option value="${t}" ${t === da ? 'selected' : ''}>${NOME[t]}</option>`).join('')}</select>
         <button class="btn" data-act="addMatch">${ms.length ? 'Nova partida' : 'Iniciar primeira partida'}</button></div>`;
@@ -839,17 +845,17 @@
         const somenteAdmin = new Set(['openDay', 'delDay', 'attAll', 'attNone', 'draw', 'addMatch', 'addGoal', 'delEvent', 'finish', 'reopen', 'leave', 'delMatch', 'rename', 'toggleActive', 'delPlayer', 'sample', 'reset']);
 
         const act = {
-            theme() {aplicarTema(document.documentElement.dataset.theme === 'escuro' ? 'claro' : 'escuro');},
-            logout() {signOut(auth); openDay = null;},
-            openDay(b) {openDay = b.dataset.id; render(); window.scrollTo(0, 0);},
-            closeDay() {openDay = null; render();},
-            delDay(b) {if (!confirm('Excluir este dia de jogo?')) return; openDay = null; del('days', b.dataset.id); render();},
-            attAll() {const d = curDay(); d.attendees = state.players.filter(p => p.pos === 'FIELD' && p.active).map(p => p.id); put('days', d);},
-            attNone() {const d = curDay(); d.attendees = []; put('days', d);},
+            theme() { aplicarTema(document.documentElement.dataset.theme === 'escuro' ? 'claro' : 'escuro'); },
+            logout() { signOut(auth); openDay = null; },
+            openDay(b) { openDay = b.dataset.id; render(); window.scrollTo(0, 0); },
+            closeDay() { openDay = null; render(); },
+            delDay(b) { if (!confirm('Excluir este dia de jogo?')) return; openDay = null; del('days', b.dataset.id); render(); },
+            attAll() { const d = curDay(); d.attendees = state.players.filter(p => p.pos === 'FIELD' && p.active).map(p => p.id); put('days', d); },
+            attNone() { const d = curDay(); d.attendees = []; put('days', d); },
             draw() {
                 const day = curDay();
                 const ids = day.attendees.filter(id => P(id) && P(id).pos === 'FIELD');
-                if (ids.length < 3) {alert('Selecione pelo menos 3 jogadores de linha.'); return;}
+                if (ids.length < 3) { alert('Selecione pelo menos 3 jogadores de linha.'); return; }
                 const gk = currentGKs(), mode = currentMode();
                 day.teams = mode === 'balanced' ? balancedSplit(ids, day.id, gk) : deal(shuffle(ids.slice()));
                 day.gk = gk; day.mode = mode;
@@ -857,17 +863,17 @@
             },
             addMatch() {
                 const h = $('#mHome').value, a = $('#mAway').value;
-                if (h === a) {alert('Escolha dois times diferentes.'); return;}
+                if (h === a) { alert('Escolha dois times diferentes.'); return; }
                 put('matches', novaPartida(openDay, h, a));
             },
             addGoal(b) {
                 const m = M(b.dataset.mid), t = b.dataset.team;
                 const sc = $(`#sc-${m.id}-${t}`).value, as = $(`#as-${m.id}-${t}`).value;
-                if (!sc) {alert('Selecione o autor do gol.'); return;}
-                if (as === sc) {alert('O autor do gol e a assistência devem ser jogadores diferentes.'); return;}
-                m.events.push({team: t, scorer: sc, assist: as || null}); put('matches', m);
+                if (!sc) { alert('Selecione o autor do gol.'); return; }
+                if (as === sc) { alert('O autor do gol e a assistência devem ser jogadores diferentes.'); return; }
+                m.events.push({ team: t, scorer: sc, assist: as || null }); put('matches', m);
             },
-            delEvent(b) {const m = M(b.dataset.mid); m.events.splice(+b.dataset.idx, 1); put('matches', m);},
+            delEvent(b) { const m = M(b.dataset.mid); m.events.splice(+b.dataset.idx, 1); put('matches', m); },
             async finish(b) {
                 const m = M(b.dataset.mid);
                 const ms = dayMatches(m.dayId), isLast = ms[ms.length - 1].id === m.id;
@@ -889,26 +895,26 @@
                 const fica = sai === m.home ? m.away : m.home, entra = TEAMS.find(t => t !== m.home && t !== m.away);
                 put('matches', novaPartida(m.dayId, fica, entra));
             },
-            delMatch(b) {if (confirm('Excluir esta partida e seus gols?')) del('matches', b.dataset.mid);},
-            rename(b) {const p = P(b.dataset.id), n = prompt('Novo nome', p.name); if (n && n.trim()) {p.name = n.trim(); put('players', p);} },
-            toggleActive(b) {const p = P(b.dataset.id); p.active = !p.active; put('players', p);},
+            delMatch(b) { if (confirm('Excluir esta partida e seus gols?')) del('matches', b.dataset.mid); },
+            rename(b) { const p = P(b.dataset.id), n = prompt('Novo nome', p.name); if (n && n.trim()) { p.name = n.trim(); put('players', p); } },
+            toggleActive(b) { const p = P(b.dataset.id); p.active = !p.active; put('players', p); },
             delPlayer(b) {
                 const id = b.dataset.id;
                 const used = state.days.some(d => d.attendees.includes(id) || (d.teams && TEAMS.some(t => d.teams[t].includes(id))) || (d.gk && Object.values(d.gk).includes(id)))
                     || state.matches.some(m => m.events.some(e => e.scorer === id || e.assist === id));
-                if (used) {alert('Este jogador possui histórico. Arquive-o para manter as estatísticas.'); return;}
+                if (used) { alert('Este jogador possui histórico. Arquive-o para manter as estatísticas.'); return; }
                 if (confirm('Excluir este jogador?')) del('players', id);
             },
             sample() {
                 const ops = [];
                 ['Lucas', 'Mateus', 'Gabriel', 'Rafael', 'Pedro', 'Felipe', 'Bruno', 'Thiago', 'Diego', 'Caio', 'Igor', 'Leandro', 'Renan', 'Vinicius', 'Marcos', 'Andre', 'Joao', 'Daniel']
-                    .forEach(name => ops.push(['set', 'players', {id: uid(), name, pos: 'FIELD', team: null, active: true}]));
+                    .forEach(name => ops.push(['set', 'players', { id: uid(), name, pos: 'FIELD', team: null, active: true }]));
                 [['Rodrigo', 'YELLOW'], ['Fabio', 'BLUE'], ['Henrique', 'RED']]
-                    .forEach(([name, team]) => ops.push(['set', 'players', {id: uid(), name, pos: 'GK', team, active: true}]));
+                    .forEach(([name, team]) => ops.push(['set', 'players', { id: uid(), name, pos: 'GK', team, active: true }]));
                 lote(ops);
             },
             exportData() {
-                const blob = new Blob([JSON.stringify(state, null, 2)], {type: 'application/json'});
+                const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
                 const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'dia-de-jogo-' + todayStr() + '.json'; a.click();
                 setTimeout(() => URL.revokeObjectURL(a.href), 1000);
             },
@@ -916,7 +922,7 @@
                 if (!confirm('Apagar todos os jogadores, dias de jogo e estatísticas?') || !confirm('Esta ação não pode ser desfeita. Continuar?')) return;
                 const ops = [];
                 ['players', 'days', 'matches'].forEach(col => state[col].forEach(o => ops.push(['del', col, o.id])));
-                ops.push(['set', 'config', {id: 'settings', ...PADRAO}]);
+                ops.push(['set', 'config', { id: 'settings', ...PADRAO }]);
                 openDay = null; await lote(ops);
             }
         };
@@ -928,7 +934,7 @@
                 $('#attCount').textContent = attText(d);
                 put('days', d);
             },
-            gkTeam(el) {if (!isAdmin) return; const p = P(el.dataset.id); p.team = el.value; put('players', p);},
+            gkTeam(el) { if (!isAdmin) return; const p = P(el.dataset.id); p.team = el.value; put('players', p); },
             importData(el) {
                 if (!isAdmin) return;
                 const file = el.files[0]; if (!file) return;
@@ -940,10 +946,10 @@
                         if (!confirm('Importar este arquivo? Os registros com o mesmo identificador serão substituídos.')) return;
                         const ops = [];
                         ['players', 'days', 'matches'].forEach(col => d[col].forEach(o => ops.push(['set', col, o])));
-                        const s = {...PADRAO}; Object.keys(PADRAO).forEach(k => {if (d.settings && d.settings[k]) s[k] = d.settings[k];});
-                        ops.push(['set', 'config', {id: 'settings', ...s}]);
+                        const s = { ...PADRAO }; Object.keys(PADRAO).forEach(k => { if (d.settings && d.settings[k]) s[k] = d.settings[k]; });
+                        ops.push(['set', 'config', { id: 'settings', ...s }]);
                         await lote(ops); alert('Dados importados.');
-                    } catch (e) {alert('Arquivo inválido.');}
+                    } catch (e) { alert('Arquivo inválido.'); }
                 };
                 r.readAsText(file);
             }
@@ -952,26 +958,26 @@
         const frm = {
             login() {
                 signInWithEmailAndPassword(auth, $('#lEmail').value.trim(), $('#lSenha').value)
-                    .catch(() => {$('#loginErr').textContent = 'E-mail ou senha incorretos.';});
+                    .catch(() => { $('#loginErr').textContent = 'E-mail ou senha incorretos.'; });
             },
             addDay() {
                 if (!isAdmin) return;
                 const date = $('#dDate').value; if (!date) return;
-                const d = {id: uid(), date, time: $('#dTime').value, place: $('#dPlace').value.trim(), attendees: [], teams: null, gk: null, mode: null};
+                const d = { id: uid(), date, time: $('#dTime').value, place: $('#dPlace').value.trim(), attendees: [], teams: null, gk: null, mode: null };
                 openDay = d.id; put('days', d); render();
             },
             addPlayer() {
                 if (!isAdmin) return;
                 const name = $('#pName').value.trim(); if (!name) return;
-                if (state.players.some(p => p.name.toLowerCase() === name.toLowerCase())) {alert('Já existe um jogador com esse nome.'); return;}
+                if (state.players.some(p => p.name.toLowerCase() === name.toLowerCase())) { alert('Já existe um jogador com esse nome.'); return; }
                 const pos = $('#pPos').value;
-                put('players', {id: uid(), name, pos, team: pos === 'GK' ? $('#pTeam').value : null, active: true});
+                put('players', { id: uid(), name, pos, team: pos === 'GK' ? $('#pTeam').value : null, active: true });
                 setTimeout(() => $('#pName') && $('#pName').focus(), 50);
             },
             settings() {
                 if (!isAdmin) return;
                 const n = (id, min) => Math.max(min, parseInt($('#' + id).value, 10) || min);
-                put('config', {id: 'settings', teamSize: n('sTeam', 1), pairMemory: n('sPair', 1), watchWindow: n('sWin', 2), minGames: n('sMin', 1)})
+                put('config', { id: 'settings', teamSize: n('sTeam', 1), pairMemory: n('sPair', 1), watchWindow: n('sWin', 2), minGames: n('sMin', 1) })
                     .then(() => alert('Configurações salvas.'));
             }
         };
@@ -979,20 +985,20 @@
         /* ========== Eventos e renderização ========== */
         document.addEventListener('click', e => {
             const b = e.target.closest('[data-act],[data-view],[data-tab]'); if (!b) return;
-            if (b.dataset.view) {view = b.dataset.view; openDay = null; render(); return;}
-            if (b.dataset.tab) {rankTab = b.dataset.tab; render(); return;}
+            if (b.dataset.view) { view = b.dataset.view; openDay = null; render(); return; }
+            if (b.dataset.tab) { rankTab = b.dataset.tab; render(); return; }
             const a = b.dataset.act;
             if (somenteAdmin.has(a) && !isAdmin) return;
             act[a] && act[a](b);
         });
-        document.addEventListener('change', e => {const el = e.target.closest('[data-chg]'); if (el && chg[el.dataset.chg]) chg[el.dataset.chg](el);});
-        document.addEventListener('submit', e => {e.preventDefault(); const f = e.target.dataset.form; if (frm[f]) frm[f](e.target);});
+        document.addEventListener('change', e => { const el = e.target.closest('[data-chg]'); if (el && chg[el.dataset.chg]) chg[el.dataset.chg](el); });
+        document.addEventListener('submit', e => { e.preventDefault(); const f = e.target.dataset.form; if (frm[f]) frm[f](e.target); });
 
         function render() {
             document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('active', b.dataset.view === view));
-            if (loadError) {$('#app').innerHTML = `<div class="card"><h3>Erro ao carregar os dados</h3><p class="sub" style="margin:0">${esc(loadError)}. Verifique a configuração e as regras do Firestore.</p></div>`; return;}
-            if (!Object.values(loaded).every(Boolean)) {$('#app').innerHTML = '<p class="empty">Carregando...</p>'; return;}
-            $('#app').innerHTML = ({teams: viewTeams, schedule: viewSchedule, rankings: viewRankings, watch: viewWatch, admin: viewAdmin})[view]();
+            if (loadError) { $('#app').innerHTML = `<div class="card"><h3>Erro ao carregar os dados</h3><p class="sub" style="margin:0">${esc(loadError)}. Verifique a configuração e as regras do Firestore.</p></div>`; return; }
+            if (!Object.values(loaded).every(Boolean)) { $('#app').innerHTML = '<p class="empty">Carregando...</p>'; return; }
+            $('#app').innerHTML = ({ teams: viewTeams, schedule: viewSchedule, rankings: viewRankings, watch: viewWatch, admin: viewAdmin })[view]();
         }
     </script>
 </body>
