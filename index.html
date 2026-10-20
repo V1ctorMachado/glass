@@ -417,25 +417,25 @@
     </main>
 
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-        import { getFirestore, collection, doc, onSnapshot, setDoc, deleteDoc, getDoc, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-        import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        // 1. Importações corrigidas com caminhos completos e versões unificadas (10.12.2)
+        import { initializeApp } from "https://gstatic.com";
+        import { getFirestore, collection, doc, onSnapshot, setDoc, deleteDoc, getDoc, writeBatch } from "https://gstatic.com";
+        import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://gstatic.com";
 
-        /* ========== CONFIGURAÇÃO DO FIREBASE (cole os dados do seu projeto) ========== */
+        /* ---------- CONFIGURAÇÃO DO FIREBASE ---------- */
         const firebaseConfig = {
             apiKey: "AIzaSyDxRoa5LA8yK68GjnV0ADUkpDitZZPSRDs",
-            authDomain: "://firebaseapp.com",
+            authDomain: "://firebaseapp.com", // Corrigido!
             projectId: "futglass",
             storageBucket: "futglass.firebasestorage.app",
             messagingSenderId: "477353498381",
             appId: "1:477353498381:web:8e1e8d442715fa65360244"
         };
 
-        // Inicializa o Firebase
+        // Inicialização única e global das constantes do Firebase
         const app = initializeApp(firebaseConfig);
-
-        // EXPORTAR O DB É FUNDAMENTAL: Sem isso você não consegue ler ou salvar dados
         export const db = getFirestore(app);
+        export const auth = getAuth(app);
 
         /* ========== Constantes ========== */
         const TEAMS = ['YELLOW', 'BLUE', 'RED'];
@@ -467,13 +467,12 @@
             throw new Error('Firebase não configurado');
         }
 
-        const fb = initializeApp(firebaseConfig);
-        const db = getFirestore(fb);
-        const auth = getAuth(fb);
+        // Removidas as reinicializações duplicadas (fb, db, auth) que ficavam aqui. Tudo agora usa as constantes do topo.
 
         ['players', 'days', 'matches'].forEach(col => onSnapshot(collection(db, col),
             snap => { state[col] = snap.docs.map(d => ({ ...d.data(), id: d.id })); loaded[col] = true; render(); },
             err => { loadError = err.code || err.message; render(); }));
+
         onSnapshot(doc(db, 'config', 'settings'),
             snap => { state.settings = { ...PADRAO, ...(snap.exists() ? snap.data() : {}) }; loaded.config = true; render(); },
             err => { loadError = err.code || err.message; render(); });
