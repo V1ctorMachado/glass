@@ -959,7 +959,15 @@
         const frm = {
             login() {
                 signInWithEmailAndPassword(auth, ADMIN_EMAIL, $('#lSenha').value)
-                    .catch(() => { $('#loginErr').textContent = 'Senha incorreta.'; });
+                    .catch(e => {
+                        const msgs = {
+                            'auth/invalid-credential': 'Senha incorreta.',
+                            'auth/wrong-password': 'Senha incorreta.',
+                            'auth/user-not-found': 'Senha incorreta.',
+                            'auth/too-many-requests': 'Muitas tentativas. Aguarde um minuto e tente novamente.'
+                        };
+                        $('#loginErr').textContent = msgs[e.code] || 'Erro: ' + (e.code || e.message);
+                    });
             },
             addDay() {
                 if (!isAdmin) return;
