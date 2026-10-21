@@ -432,6 +432,9 @@
             appId: "1:477353498381:web:8e1e8d442715fa65360244"
         };
 
+        // Login do admin usa um e-mail fixo no código; o segredo distribuído aos organizadores é só a senha.
+        const ADMIN_EMAIL = 'admin@futglass.app';
+
         // Inicialização única e global das constantes do Firebase
         const app = initializeApp(firebaseConfig);
         export const db = getFirestore(app);
@@ -727,8 +730,7 @@
                 if (authUser) return `<h2>Admin</h2><div class="card" style="max-width:420px"><p class="flag" style="margin-bottom:12px">${esc(authMsg || 'Verificando permissão...')}</p><button class="btn ghost" data-act="logout">Sair</button></div>`;
                 return `<h2>Admin</h2><p class="sub">Área restrita para agendar dias de jogo e registrar resultados.</p>
       <div class="card" style="max-width:420px"><form data-form="login" class="fields" style="grid-template-columns:1fr">
-        <label class="field"><span>E-mail</span><input id="lEmail" type="email" autocomplete="username" required></label>
-        <label class="field"><span>Senha</span><input id="lSenha" type="password" autocomplete="current-password" required></label>
+        <label class="field"><span>Senha de acesso</span><input id="lSenha" type="password" autocomplete="current-password" required></label>
         <button class="btn">Entrar</button></form><p id="loginErr" class="flag" style="margin-top:8px"></p></div>`;
             }
             const d = curDay();
@@ -956,8 +958,8 @@
 
         const frm = {
             login() {
-                signInWithEmailAndPassword(auth, $('#lEmail').value.trim(), $('#lSenha').value)
-                    .catch(() => { $('#loginErr').textContent = 'E-mail ou senha incorretos.'; });
+                signInWithEmailAndPassword(auth, ADMIN_EMAIL, $('#lSenha').value)
+                    .catch(() => { $('#loginErr').textContent = 'Senha incorreta.'; });
             },
             addDay() {
                 if (!isAdmin) return;
