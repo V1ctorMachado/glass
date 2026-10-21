@@ -418,14 +418,14 @@
 
     <script type="module">
         // 1. Importações corrigidas com caminhos completos e versões unificadas (10.12.2)
-        import { initializeApp } from "https://gstatic.com";
-        import { getFirestore, collection, doc, onSnapshot, setDoc, deleteDoc, getDoc, writeBatch } from "https://gstatic.com";
-        import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://gstatic.com";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getFirestore, collection, doc, onSnapshot, setDoc, deleteDoc, getDoc, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+        import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
         /* ---------- CONFIGURAÇÃO DO FIREBASE ---------- */
         const firebaseConfig = {
             apiKey: "AIzaSyDxRoa5LA8yK68GjnV0ADUkpDitZZPSRDs",
-            authDomain: "://firebaseapp.com", // Corrigido!
+            authDomain: "futglass.firebaseapp.com",
             projectId: "futglass",
             storageBucket: "futglass.firebasestorage.app",
             messagingSenderId: "477353498381",
