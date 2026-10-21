@@ -572,7 +572,12 @@
         const modeLabel = m => m === 'balanced' ? 'Balanceado por estatísticas' : 'Aleatório';
 
         function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1));[a[i], a[j]] = [a[j], a[i]]; } return a; }
-        function roster(day, team) { if (!day.teams) return []; const r = day.teams[team].slice(); const gk = day.gk && day.gk[team]; if (gk) r.unshift(gk); return r; }
+        function gkOf(day, m, t) {
+            if (day.gk && day.gk[t]) return day.gk[t];
+            const folga = TEAMS.find(x => x !== m.home && x !== m.away);
+            return (folga && day.gk && day.gk[folga]) || null;
+        }
+        function roster(day, team, m) { if (!day.teams) return []; const r = day.teams[team].slice(); const gk = m ? gkOf(day, m, team) : (day.gk && day.gk[team]); if (gk) r.unshift(gk); return r; }
         function score(m) { return [m.events.filter(e => e.team === m.home).length, m.events.filter(e => e.team === m.away).length]; }
         function currentGKs() { const g = {}; TEAMS.forEach(t => { const p = state.players.find(x => x.pos === 'GK' && x.active && x.team === t); g[t] = p ? p.id : null; }); return g; }
         function dayStatus(d) {
@@ -616,7 +621,7 @@
                     });
                     [[m.home, hg, ag], [m.away, ag, hg]].forEach(([t, f, a]) => {
                         const r = f > a ? 'W' : f < a ? 'L' : 'D';
-                        roster(day, t).forEach(id => { const x = s[id]; if (!x) return; x.games++; x[r.toLowerCase()]++; x.log.push({ r, ga: ga[id] || 0 }); });
+                        roster(day, t, m).forEach(id => { const x = s[id]; if (!x) return; x.games++; x[r.toLowerCase()]++; x.log.push({ r, ga: ga[id] || 0 }); });
                     });
                 });
             return s;
@@ -683,10 +688,11 @@
         /* ========== Componentes ========== */
         function teamCard(day, t, extra = '') {
             const gk = day.gk && day.gk[t];
+            const empresta = !gk && TEAMS.some(o => o !== t && day.gk && day.gk[o]);
             return `<div class="card team ${t}">
     <h3><span>${NOME[t]}</span><span class="tag">${extra || (day.teams[t].length + (gk ? 1 : 0)) + ' jogadores'}</span></h3>
     <ul class="list">
-      ${gk ? `<li><span>${esc(pname(gk))}</span><span class="tag">Goleiro</span></li>` : '<li><span class="flag">Sem goleiro</span></li>'}
+      ${gk ? `<li><span>${esc(pname(gk))}</span><span class="tag">Goleiro</span></li>` : empresta ? '<li><span class="tag">Goleiro emprestado do time que folgar</span></li>' : '<li><span class="flag">Sem goleiro</span></li>'}
       ${day.teams[t].map(id => `<li><span>${esc(pname(id))}</span></li>`).join('')}
     </ul></div>`;
         }
@@ -806,15 +812,15 @@
             const ms = dayMatches(day.id), locked = ms.length > 0;
             const gkMissing = TEAMS.filter(t => !currentGKs()[t]);
             let h = `<div class="row between" style="margin-bottom:20px"><div><h2>${fmtDate(day.date)}</h2><p class="sub" style="margin:0">${[day.time, day.place].filter(Boolean).map(esc).join(' - ') || 'Sem horário ou local definido'}</p></div>
-    <div class="row"><button class="btn ghost" data-act="closeDay">Voltar</button>${locked ? '' : `<button class="btn ghost" data-act="delDay" data-id="${day.id}">Excluir dia</button>`}</div></div>`;
+    <div class="row"><button class="btn ghost" data-act="closeDay">Voltar</button><button class="btn ghost" data-act="delDay" data-id="${day.id}">Excluir dia</button></div></div>`;
 
             h += `<div class="card"><h3>Presença</h3><p class="sub" id="attCount">${attText(day)}</p>
     ${locked ? '<p class="sub">A presença está bloqueada porque já existem partidas registradas.</p>' : '<div class="row" style="margin-bottom:12px"><button class="btn ghost small" data-act="attAll">Selecionar todos</button><button class="btn ghost small" data-act="attNone">Limpar</button></div>'}
     <div class="checks">${field.map(p => `<label><input type="checkbox" data-chg="att" data-id="${p.id}" ${day.attendees.includes(p.id) ? 'checked' : ''} ${locked ? 'disabled' : ''}>${esc(p.name)}</label>`).join('') || '<p class="empty">Nenhum jogador de linha cadastrado.</p>'}</div>
-    <p class="sub" style="margin:12px 0 0">Os goleiros são fixos em seus times e não participam do sorteio.</p></div>`;
+    <p class="sub" style="margin:12px 0 0">Os goleiros são fixos em seus times e não participam do sorteio. Se um time ficar sem goleiro, o goleiro do time que folgar agarra o gol dele.</p></div>`;
 
             h += `<div class="card"><h3>Sorteio</h3><p class="sub">${modeInfo()}</p>
-    ${gkMissing.length ? `<p class="flag" style="margin-bottom:12px">Sem goleiro definido para: ${gkMissing.map(t => NOME[t]).join(', ')}.</p>` : ''}
+    ${gkMissing.length === 1 ? `<p class="flag" style="margin-bottom:12px">${NOME[gkMissing[0]]} sem goleiro fixo: nas partidas dele, agarra o goleiro do time que folgar.</p>` : gkMissing.length ? `<p class="flag" style="margin-bottom:12px">Sem goleiro definido para: ${gkMissing.map(t => NOME[t]).join(', ')}.</p>` : ''}
     ${locked ? '<p class="sub" style="margin:0">O sorteio está bloqueado porque já existem partidas registradas neste dia.</p>' : `<button class="btn" data-act="draw">${day.teams ? 'Sortear novamente' : 'Sortear times'}</button>`}</div>`;
 
             if (day.teams) {
@@ -846,8 +852,10 @@
         function matchAdmin(m, day, i, ms) {
             const [hg, ag] = score(m), isLast = i === ms.length - 1;
             const evForm = t => {
-                const opts = roster(day, t).map(id => `<option value="${id}">${esc(pname(id))}</option>`).join('');
+                const gk = gkOf(day, m, t);
+                const opts = roster(day, t, m).map(id => `<option value="${id}">${esc(pname(id))}</option>`).join('');
                 return `<div class="card" style="margin:0; padding:12px"><div style="text-align:center; font-weight:600; margin-bottom:8px">${dot(t)}${NOME[t]}</div>
+      <div class="note" style="text-align:center; margin-bottom:6px">Goleiro: ${gk ? esc(pname(gk)) + (day.gk && day.gk[t] ? '' : ' (emprestado)') : 'nenhum'}</div>
       <select id="sel-${m.id}-${t}" style="width:100%; margin-bottom:8px"><option value="">Jogador...</option>${opts}</select>
       <div class="evgrid"><button class="evbtn gol" data-act="addGoal" data-mid="${m.id}" data-team="${t}">Gol</button><button class="evbtn ass" data-act="addAssist" data-mid="${m.id}" data-team="${t}">Assist.</button><button class="evbtn og" data-act="addOwn" data-mid="${m.id}" data-team="${t}">Contra</button></div></div>`;
             };
@@ -885,7 +893,13 @@
             logout() { signOut(auth); openDay = null; },
             openDay(b) { openDay = b.dataset.id; render(); window.scrollTo(0, 0); },
             closeDay() { openDay = null; render(); },
-            delDay(b) { if (!confirm('Excluir este dia de jogo?')) return; openDay = null; del('days', b.dataset.id); render(); },
+            delDay(b) {
+                const id = b.dataset.id, partidas = state.matches.filter(m => m.dayId === id);
+                if (!confirm(partidas.length ? `Excluir este dia e as ${partidas.length} partida(s) registradas (com os gols)?` : 'Excluir este dia de jogo?')) return;
+                openDay = null;
+                lote([...partidas.map(m => ['del', 'matches', m.id]), ['del', 'days', id]]);
+                render();
+            },
             attAll() { const d = curDay(); d.attendees = state.players.filter(p => p.pos === 'FIELD' && p.active).map(p => p.id); put('days', d); },
             attNone() { const d = curDay(); d.attendees = []; put('days', d); },
             draw() {
