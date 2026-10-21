@@ -24,6 +24,7 @@
             --yellow: #e0a800;
             --blue: #2563eb;
             --red: #dc2626;
+            --green: #16a34a;
             --warn: #b45309;
             color-scheme: light;
         }
@@ -38,6 +39,7 @@
             --yellow: #f5c400;
             --blue: #3b82f6;
             --red: #ef4444;
+            --green: #22c55e;
             --warn: #f59e0b;
             color-scheme: dark;
         }
@@ -391,6 +393,53 @@
             font-weight: 700;
             margin: 0 8px
         }
+
+        .grid2 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 12px
+        }
+
+        .evgrid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px
+        }
+
+        .evbtn {
+            font: inherit;
+            font-size: 14px;
+            padding: 9px 8px;
+            border-radius: 6px;
+            border: 1px solid var(--line);
+            background: transparent;
+            color: var(--text);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px
+        }
+
+        .evbtn:hover {
+            border-color: var(--text)
+        }
+
+        .evbtn.gol {
+            color: var(--green);
+            border-color: var(--green);
+            grid-column: 1 / -1
+        }
+
+        .evbtn.ass {
+            color: var(--blue);
+            border-color: var(--blue)
+        }
+
+        .evbtn.og {
+            color: var(--red);
+            border-color: var(--red)
+        }
     </style>
 </head>
 
@@ -562,7 +611,7 @@
                 .forEach(m => {
                     const day = dayById(m.dayId), [hg, ag] = score(m), ga = {};
                     m.events.forEach(e => {
-                        if (s[e.scorer]) { s[e.scorer].goals++; ga[e.scorer] = (ga[e.scorer] || 0) + 1; }
+                        if (s[e.scorer] && !e.own) { s[e.scorer].goals++; ga[e.scorer] = (ga[e.scorer] || 0) + 1; }
                         if (e.assist && s[e.assist]) { s[e.assist].assists++; ga[e.assist] = (ga[e.assist] || 0) + 1; }
                     });
                     [[m.home, hg, ag], [m.away, ag, hg]].forEach(([t, f, a]) => {
@@ -643,8 +692,8 @@
         }
         function matchLine(m) {
             const [h, a] = score(m), sc = {};
-            m.events.forEach(e => sc[e.scorer] = (sc[e.scorer] || 0) + 1);
-            const names = Object.entries(sc).map(([id, n]) => esc(pname(id)) + (n > 1 ? ` (${n})` : '')).join(', ');
+            m.events.forEach(e => { const k = e.own ? e.scorer + '|c' : e.scorer; sc[k] = (sc[k] || 0) + 1; });
+            const names = Object.entries(sc).map(([id, n]) => { const c = id.endsWith('|c'); return esc(pname(c ? id.slice(0, -2) : id)) + (c ? ' (contra)' : '') + (n > 1 ? ` (${n})` : ''); }).join(', ');
             return `<li style="display:block"><div>${teamLabel(m.home)} <b>&nbsp;${h} x ${a}&nbsp;</b> ${teamLabel(m.away)}</div>${names ? `<div class="note">Gols: ${names}</div>` : ''}</li>`;
         }
         function dayResults(day) {
@@ -735,7 +784,7 @@
             }
             const d = curDay();
             if (d) return dayPanel(d);
-            return `<div class="row between"><h2>Admin</h2><button class="btn ghost small" data-act="logout">Sair</button></div><p class="sub">${modeInfo()}</p>` + scheduleAdmin() + playersAdmin() + settingsAdmin();
+            return `<div class="row between"><h2>Admin</h2><button class="btn ghost small" data-act="logout">Sair</button></div><p class="sub">${modeInfo()}</p>` + scheduleAdmin() + playersAdmin();
         }
 
         function scheduleAdmin() {
@@ -796,16 +845,16 @@
 
         function matchAdmin(m, day, i, ms) {
             const [hg, ag] = score(m), isLast = i === ms.length - 1;
-            const goalForm = t => {
+            const evForm = t => {
                 const opts = roster(day, t).map(id => `<option value="${id}">${esc(pname(id))}</option>`).join('');
-                return `<div class="row" style="margin-top:8px"><span class="tag" style="width:86px">${dot(t)}${NOME[t]}</span>
-      <select id="sc-${m.id}-${t}"><option value="">Autor do gol</option>${opts}</select>
-      <select id="as-${m.id}-${t}"><option value="">Sem assistência</option>${opts}</select>
-      <button class="btn small" data-act="addGoal" data-mid="${m.id}" data-team="${t}">Registrar gol</button></div>`;
+                return `<div class="card" style="margin:0; padding:12px"><div style="text-align:center; font-weight:600; margin-bottom:8px">${dot(t)}${NOME[t]}</div>
+      <select id="sel-${m.id}-${t}" style="width:100%; margin-bottom:8px"><option value="">Jogador...</option>${opts}</select>
+      <div class="evgrid"><button class="evbtn gol" data-act="addGoal" data-mid="${m.id}" data-team="${t}">Gol</button><button class="evbtn ass" data-act="addAssist" data-mid="${m.id}" data-team="${t}">Assist.</button><button class="evbtn og" data-act="addOwn" data-mid="${m.id}" data-team="${t}">Contra</button></div></div>`;
             };
-            return `<div class="card"><div class="row between"><h3 style="margin:0">Partida ${i + 1}: ${teamLabel(m.home)} &nbsp;${hg} x ${ag}&nbsp; ${teamLabel(m.away)}</h3><span class="pill">${m.done ? 'Encerrada' : 'Em andamento'}</span></div>
-    ${m.events.length ? `<ul class="list" style="margin-top:8px">${m.events.map((e, k) => `<li><span>${dot(e.team)}${esc(pname(e.scorer))}${e.assist ? ` <span class="note">&nbsp;assistência: ${esc(pname(e.assist))}</span>` : ''}</span>${m.done ? '' : `<button class="btn ghost small" data-act="delEvent" data-mid="${m.id}" data-idx="${k}">Remover</button>`}</li>`).join('')}</ul>` : '<p class="empty">Nenhum gol ainda.</p>'}
-    ${m.done ? `<p class="note" style="margin-top:8px">${rotacaoTexto(m)}</p>` : goalForm(m.home) + goalForm(m.away)}
+            return `<div class="card"><div class="row between"><span class="tag">Partida ${i + 1}</span><span class="pill">${m.done ? 'Encerrada' : 'Em andamento'}</span></div>
+    <div style="text-align:center; margin:6px 0 2px"><b>${NOME[m.home]}</b><span class="score">${hg} x ${ag}</span><b>${NOME[m.away]}</b></div>
+    ${m.events.length ? `<ul class="list" style="margin-top:8px">${m.events.map((e, k) => `<li><span>${dot(e.team)}${esc(pname(e.scorer))}${e.own ? ' <span class="note">(contra)</span>' : ''}${e.assist ? ` <span class="note">&nbsp;assistência: ${esc(pname(e.assist))}</span>` : ''}</span>${m.done ? '' : `<button class="btn ghost small" data-act="delEvent" data-mid="${m.id}" data-idx="${k}">Remover</button>`}</li>`).join('')}</ul>` : '<p class="empty">Nenhum gol ainda.</p>'}
+    ${m.done ? `<p class="note" style="margin-top:8px">${rotacaoTexto(m)}</p>` : `<div class="grid2" style="margin-top:12px">${evForm(m.home)}${evForm(m.away)}</div>`}
     <div class="row" style="margin-top:12px">
       ${m.done ? (canReopen(m, ms) ? `<button class="btn ghost small" data-act="reopen" data-mid="${m.id}">Reabrir</button>` : '') : `<button class="btn small" data-act="finish" data-mid="${m.id}">Encerrar partida</button>`}
       ${isLast ? `<button class="btn ghost small" data-act="delMatch" data-mid="${m.id}">Excluir partida</button>` : ''}
@@ -826,20 +875,6 @@
       <td><div class="row" style="justify-content:flex-end"><button class="btn ghost small" data-act="rename" data-id="${p.id}">Renomear</button><button class="btn ghost small" data-act="toggleActive" data-id="${p.id}">${p.active ? 'Arquivar' : 'Restaurar'}</button><button class="btn ghost small" data-act="delPlayer" data-id="${p.id}">Excluir</button></div></td></tr>`).join('')}
     </tbody></table></div>` : '<p class="empty">Nenhum jogador cadastrado.</p><button class="btn ghost small" data-act="sample">Adicionar jogadores de exemplo</button>'}
   </div>`;
-        }
-
-        function settingsAdmin() {
-            const s = state.settings;
-            const f = (id, label, val) => `<label class="field"><span>${label}</span><input id="${id}" type="number" min="1" value="${esc(val)}"></label>`;
-            return `<div class="card"><h3>Configurações</h3><form data-form="settings"><div class="fields">
-    ${f('sTeam', 'Jogadores de linha por time', s.teamSize)}
-    ${f('sPair', 'Dias lembrados para evitar repetição de duplas', s.pairMemory)}
-    ${f('sWin', 'Janela da lista de observação (jogos)', s.watchWindow)}
-    ${f('sMin', 'Mínimo de jogos para estatísticas', s.minGames)}
-    </div><p class="sub" style="margin:12px 0">Período aleatório: ${DIAS_ALEATORIO} dias (fixo). Depois disso, o sorteio balanceado é obrigatório.</p>
-    <button class="btn">Salvar configurações</button></form></div>
-    <div class="card"><h3>Dados</h3><p class="sub">Os dados ficam no Firebase e são sincronizados em tempo real para todos. Exporte periodicamente para ter um backup.</p>
-    <div class="row"><button class="btn ghost" data-act="exportData">Exportar</button><label class="btn ghost">Importar<input type="file" accept=".json" data-chg="importData" hidden></label><button class="btn ghost" data-act="reset">Apagar todos os dados</button></div></div>`;
         }
 
         /* ========== Ações ========== */
@@ -868,11 +903,23 @@
                 put('matches', novaPartida(openDay, h, a));
             },
             addGoal(b) {
-                const m = M(b.dataset.mid), t = b.dataset.team;
-                const sc = $(`#sc-${m.id}-${t}`).value, as = $(`#as-${m.id}-${t}`).value;
-                if (!sc) { alert('Selecione o autor do gol.'); return; }
-                if (as === sc) { alert('O autor do gol e a assistência devem ser jogadores diferentes.'); return; }
-                m.events.push({ team: t, scorer: sc, assist: as || null }); put('matches', m);
+                const m = M(b.dataset.mid), t = b.dataset.team, sel = $(`#sel-${m.id}-${t}`).value;
+                if (!sel) { alert('Selecione o jogador.'); return; }
+                m.events.push({ team: t, scorer: sel, assist: null }); put('matches', m);
+            },
+            addAssist(b) {
+                const m = M(b.dataset.mid), t = b.dataset.team, sel = $(`#sel-${m.id}-${t}`).value;
+                if (!sel) { alert('Selecione o jogador.'); return; }
+                const last = [...m.events].reverse().find(e => e.team === t && !e.own);
+                if (!last) { alert('Registre um gol deste time antes de lançar a assistência.'); return; }
+                if (last.assist) { alert('O último gol deste time já tem assistência.'); return; }
+                if (last.scorer === sel) { alert('O autor do gol e a assistência devem ser jogadores diferentes.'); return; }
+                last.assist = sel; put('matches', m);
+            },
+            addOwn(b) {
+                const m = M(b.dataset.mid), t = b.dataset.team, sel = $(`#sel-${m.id}-${t}`).value;
+                if (!sel) { alert('Selecione o jogador.'); return; }
+                m.events.push({ team: TEAMS.find(x => x !== t), scorer: sel, own: true, assist: null }); put('matches', m);
             },
             delEvent(b) { const m = M(b.dataset.mid); m.events.splice(+b.dataset.idx, 1); put('matches', m); },
             async finish(b) {
