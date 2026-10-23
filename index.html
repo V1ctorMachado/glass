@@ -458,7 +458,7 @@
                     <button data-view="teams">Times</button>
                     <button data-view="schedule">Agenda</button>
                     <button data-view="rankings">Rankings</button>
-                    <button data-view="watch">Em observação</button>
+                    <button data-view="watch">Estatísticas</button>
                     <button data-view="admin">Admin</button>
                 </nav>
                 <button class="btn ghost small" data-act="theme" id="themeBtn">Tema</button>
@@ -518,7 +518,7 @@
         let state = { settings: { ...PADRAO }, players: [], days: [], matches: [] };
         const loaded = { players: false, days: false, matches: false, config: false };
         let loadError = null, authUser = null, isAdmin = false, authMsg = '';
-        let view = 'teams', openDay = null;
+        let view = 'teams', openDay = null, rankTab = 'geral', statTab = 'observacao';
 
         if (!firebaseConfig.projectId) {
             $('#app').innerHTML = `<div class="card"><h3>Configuração pendente</h3><p class="sub" style="margin:0">Preencha o objeto <b>firebaseConfig</b> no código com os dados do seu projeto Firebase para começar.</p></div>`;
@@ -615,7 +615,7 @@
         /* ========== Estatísticas ========== */
         function computeStats() {
             const s = {};
-            state.players.forEach(p => s[p.id] = { id: p.id, name: p.name, pos: p.pos, active: p.active, games: 0, w: 0, d: 0, l: 0, goals: 0, assists: 0, log: [] });
+            state.players.forEach(p => s[p.id] = { id: p.id, name: p.name, pos: p.pos, active: p.active, games: 0, w: 0, d: 0, l: 0, goals: 0, assists: 0, gkGames: 0, conceded: 0, log: [] });
             const order = {}; sortedDays().forEach((d, i) => order[d.id] = i);
             state.matches
                 .filter(m => m.done && dayById(m.dayId)?.teams)
@@ -626,6 +626,7 @@
                         if (s[e.scorer] && !e.own) { s[e.scorer].goals++; ga[e.scorer] = (ga[e.scorer] || 0) + 1; }
                         if (e.assist && s[e.assist]) { s[e.assist].assists++; ga[e.assist] = (ga[e.assist] || 0) + 1; }
                     });
+                    [[m.home, ag], [m.away, hg]].forEach(([t, contra]) => { const gk = gkOf(day, m, t); if (gk && s[gk]) { s[gk].gkGames++; s[gk].conceded += contra; } });
                     [[m.home, hg, ag], [m.away, ag, hg]].forEach(([t, f, a]) => {
                         const r = f > a ? 'W' : f < a ? 'L' : 'D';
                         roster(day, t, m).forEach(id => { const x = s[id]; if (!x) return; x.games++; x[r.toLowerCase()]++; x.log.push({ r, ga: ga[id] || 0 }); });
@@ -751,19 +752,41 @@
 
         function viewRankings() {
             const min = state.settings.minGames;
-            const rows = Object.values(computeStats()).filter(x => x.games >= min)
+            const tabs = `<div class="tabs"><button data-tab="geral" class="${rankTab === 'geral' ? 'active' : ''}">Geral</button><button data-tab="linha" class="${rankTab === 'linha' ? 'active' : ''}">Jogador de linha</button></div>`;
+            const soLinha = rankTab === 'linha';
+            const rows = Object.values(computeStats()).filter(x => x.games >= min && (!soLinha || x.pos === 'FIELD'))
                 .map(x => ({ ...x, v: x.w / x.games }))
                 .sort((a, b) => b.v - a.v || b.games - a.games || a.name.localeCompare(b.name));
             let rank = 0, prev = null;
             rows.forEach((x, i) => { if (x.v !== prev) { rank = i + 1; prev = x.v; } x.rank = rank; });
-            return `<h2>Rankings</h2><p class="sub">Considera apenas partidas encerradas. Mínimo de ${min} jogos para aparecer. Empatados no winrate, quem jogou mais fica na frente.</p>
-  <div class="card scroll">${rows.length ? `<table><thead><tr><th>#</th><th>Jogador</th><th class="num">Jogos</th><th class="num">Vitórias</th><th class="num">Empates</th><th class="num">Derrotas</th><th class="num">Winrate</th></tr></thead><tbody>
-  ${rows.map(x => `<tr><td>${x.rank}</td><td>${esc(x.name)}${x.pos === 'GK' ? ' <span class="tag">Goleiro</span>' : ''}</td><td class="num">${x.games}</td><td class="num">${x.w}</td><td class="num">${x.d}</td><td class="num">${x.l}</td><td class="num">${pct(x.w / x.games)}</td></tr>`).join('')}
+            return `<h2>Rankings</h2><p class="sub">Considera apenas partidas encerradas. Mínimo de ${min} jogos para aparecer. Empatados no winrate, quem jogou mais fica na frente.${soLinha ? ' Somente jogadores de linha.' : ' Goleiros incluídos.'}</p>
+  ` + tabs + `<div class="card scroll">${rows.length ? `<table><thead><tr><th>#</th><th>Jogador</th><th class="num">Jogos</th><th class="num">Vitórias</th><th class="num">Empates</th><th class="num">Derrotas</th>${soLinha ? '<th class="num">Gols</th><th class="num">Assistências</th>' : ''}<th class="num">Winrate</th></tr></thead><tbody>
+  ${rows.map(x => `<tr><td>${x.rank}</td><td>${esc(x.name)}${x.pos === 'GK' ? ' <span class="tag">Goleiro</span>' : ''}</td><td class="num">${x.games}</td><td class="num">${x.w}</td><td class="num">${x.d}</td><td class="num">${x.l}</td>${soLinha ? `<td class="num">${x.goals}</td><td class="num">${x.assists}</td>` : ''}<td class="num">${pct(x.w / x.games)}</td></tr>`).join('')}
   </tbody></table>` : '<p class="empty">Sem dados ainda.</p>'}</div>`;
         }
 
         function viewWatch() {
             const s = state.settings, N = s.watchWindow;
+            const tabs = `<div class="tabs"><button data-tab="observacao" class="${statTab === 'observacao' ? 'active' : ''}">Em observação</button><button data-tab="destaques" class="${statTab === 'destaques' ? 'active' : ''}">Destaques</button><button data-tab="goleiros" class="${statTab === 'goleiros' ? 'active' : ''}">Menos Gols Vazados</button></div>`;
+            if (statTab === 'destaques') {
+                const st = Object.values(computeStats()).filter(x => x.games > 0);
+                const nome = x => esc(x.name) + (x.pos === 'GK' ? ' <span class="tag">GK</span>' : '');
+                const top = (rs, campo, rot) => `<div class="card" style="margin:0"><h3>${rot}</h3>${rs.length ? `<ul class="list">${rs.map((x, i) => `<li><span>${i + 1}. ${nome(x)}</span><b>${x[campo]}</b></li>`).join('')}</ul>` : '<p class="empty">Sem dados ainda.</p>'}</div>`;
+                const topGols = st.slice().sort((a, b) => b.goals - a.goals || b.assists - a.assists || a.name.localeCompare(b.name)).slice(0, 5);
+                const topAss = st.slice().sort((a, b) => b.assists - a.assists || b.goals - a.goals || a.name.localeCompare(b.name)).slice(0, 5);
+                return `<h2>Estatísticas</h2><p class="sub">Os cinco maiores artilheiros e garçons da pelada — goleiros incluídos.</p>` + tabs + `<div class="grid2">${top(topGols, 'goals', 'Top 5 Gols')}${top(topAss, 'assists', 'Top 5 Assistências')}</div>`;
+            }
+            if (statTab === 'goleiros') {
+                const gks = Object.values(computeStats()).filter(x => x.pos === 'GK' && x.gkGames > 0)
+                    .map(x => ({ ...x, media: x.conceded / x.gkGames }))
+                    .sort((a, b) => a.media - b.media || b.gkGames - a.gkGames || a.name.localeCompare(b.name));
+                let rank = 0, prev = null;
+                gks.forEach((x, i) => { if (x.media !== prev) { rank = i + 1; prev = x.media; } x.rank = rank; });
+                return `<h2>Estatísticas</h2><p class="sub">Goleiros ordenados pela média de gols vazados por partida — quanto menor, melhor. Conta gols sofridos defendendo seu time ou emprestado a outro.</p>` + tabs +
+                    `<div class="card scroll">${gks.length ? `<table><thead><tr><th>#</th><th>Goleiro</th><th class="num">Partidas no gol</th><th class="num">Gols vazados</th><th class="num">Média</th></tr></thead><tbody>
+  ${gks.map(x => `<tr><td>${x.rank}</td><td>${esc(x.name)}</td><td class="num">${x.gkGames}</td><td class="num">${x.conceded}</td><td class="num">${x.media.toFixed(2)}</td></tr>`).join('')}
+  </tbody></table>` : '<p class="empty">Sem partidas com goleiros no gol ainda.</p>'}</div>`;
+            }
             const rows = Object.values(computeStats()).filter(x => x.pos === 'FIELD' && x.active && x.games >= s.minGames).map(x => {
                 const last = x.log.slice(-N);
                 const w = last.filter(g => g.r === 'W').length, d = last.filter(g => g.r === 'D').length;
@@ -776,8 +799,8 @@
                 return { ...x, last, rate, ga, flags, ppg: (3 * w + d) / last.length };
             }).sort((a, b) => b.flags.length - a.flags.length || a.ppg - b.ppg);
             const flagged = rows.filter(r => r.flags.length).length;
-            return `<h2>Em observação</h2><p class="sub">Desempenho recente nos últimos ${N} jogos. O jogador é sinalizado com 3 ou mais derrotas seguidas, taxa de vitórias recente abaixo de 25% ou nenhum gol ou assistência nos últimos ${N} jogos. Considera jogadores de linha com pelo menos ${s.minGames} jogos.</p>
-  <div class="card scroll"><h3>${flagged} jogador${flagged === 1 ? '' : 'es'} sinalizado${flagged === 1 ? '' : 's'}</h3>${rows.length ? `<table><thead><tr><th>Jogador</th><th>Últimos ${N}</th><th class="num">Vit. recente</th><th class="num">G+A</th><th class="num">Vit. geral</th><th>Situação</th></tr></thead><tbody>
+            return `<h2>Estatísticas</h2><p class="sub">Desempenho recente nos últimos ${N} jogos. O jogador é sinalizado com 3 ou mais derrotas seguidas, taxa de vitórias recente abaixo de 25% ou nenhum gol ou assistência nos últimos ${N} jogos. Considera jogadores de linha com pelo menos ${s.minGames} jogos.</p>
+  ` + tabs + `<div class="card scroll"><h3>${flagged} jogador${flagged === 1 ? '' : 'es'} sinalizado${flagged === 1 ? '' : 's'}</h3>${rows.length ? `<table><thead><tr><th>Jogador</th><th>Últimos ${N}</th><th class="num">Vit. recente</th><th class="num">G+A</th><th class="num">Vit. geral</th><th>Situação</th></tr></thead><tbody>
   ${rows.map(x => `<tr><td>${esc(x.name)}</td><td class="form">${x.last.map(g => RES[g.r]).join(' ')}</td><td class="num">${pct(x.rate)}</td><td class="num">${x.ga}</td><td class="num">${pct(x.w / x.games)}</td><td>${x.flags.length ? `<span class="flag">${x.flags.join('; ')}</span>` : '<span class="tag">Normal</span>'}</td></tr>`).join('')}
   </tbody></table>` : '<p class="empty">Ainda não há jogos suficientes.</p>'}</div>`;
         }
@@ -1060,6 +1083,7 @@
         document.addEventListener('click', e => {
             const b = e.target.closest('[data-act],[data-view],[data-tab]'); if (!b) return;
             if (b.dataset.view) { view = b.dataset.view; openDay = null; render(); return; }
+            if (b.dataset.tab) { if (b.dataset.tab === 'geral' || b.dataset.tab === 'linha') rankTab = b.dataset.tab; else statTab = b.dataset.tab; render(); return; }
             const a = b.dataset.act;
             if (somenteAdmin.has(a) && !isAdmin) return;
             act[a] && act[a](b);
