@@ -440,6 +440,11 @@
             color: var(--red);
             border-color: var(--red)
         }
+
+        .tempo-esgotado {
+            color: var(--red);
+            font-weight: 700
+        }
     </style>
 </head>
 
@@ -494,6 +499,7 @@
         const NOME = { YELLOW: 'AMARELO', BLUE: 'AZUL', RED: 'VERMELHO' };
         const RES = { W: 'V', D: 'E', L: 'D' };
         const DIAS_ALEATORIO = 45;
+        const DURACAO_PARTIDA = 7 * 60 * 1000;
         const PADRAO = { teamSize: 6, pairMemory: 8, watchWindow: 5, minGames: 3 };
 
         const $ = s => document.querySelector(s);
@@ -570,6 +576,8 @@
         const dot = t => `<span class="dot" style="background:var(--${t.toLowerCase()})"></span>`;
         const teamLabel = t => dot(t) + NOME[t];
         const modeLabel = m => m === 'balanced' ? 'Balanceado por estatísticas' : 'Aleatório';
+        const fmtTimer = ms => { const s = Math.max(0, Math.ceil(ms / 1000)); return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'); };
+        const restante = m => m.startedAt ? DURACAO_PARTIDA - (Date.now() - m.startedAt) : null;
 
         function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1));[a[i], a[j]] = [a[j], a[i]]; } return a; }
         function gkOf(day, m, t) {
@@ -595,7 +603,7 @@
             const leave = sh > sa ? m.home : m.away;
             return { stay: leave === m.home ? m.away : m.home, leave, waiting, motivo: 'empate' };
         }
-        function novaPartida(dayId, home, away) { return { id: uid(), dayId, home, away, events: [], done: false, created: Date.now() }; }
+        function novaPartida(dayId, home, away) { return { id: uid(), dayId, home, away, events: [], done: false, created: Date.now(), startedAt: Date.now() }; }
         function canReopen(m, ms) {
             const idx = ms.findIndex(x => x.id === m.id);
             if (!m.done) return false;
@@ -721,8 +729,8 @@
             h += `<p class="sub">${fmtDate(day.date)}${day.time ? ' às ' + esc(day.time) : ''}${day.place ? ' - ' + esc(day.place) : ''} &middot; Sorteio: ${modeLabel(day.mode)}</p>`;
             const live = dayMatches(day.id).find(m => !m.done);
             if (live) {
-                const [hg, ag] = score(live), fora = TEAMS.find(x => x !== live.home && x !== live.away);
-                h += `<div class="card"><div class="row between"><div>${teamLabel(live.home)}<span class="score">${hg} x ${ag}</span>${teamLabel(live.away)}</div><span class="pill">Em andamento</span></div><p class="note" style="margin-top:6px">Aguardando: ${NOME[fora]}</p></div>`;
+                const [hg, ag] = score(live), fora = TEAMS.find(x => x !== live.home && x !== live.away), r = restante(live);
+                h += `<div class="card"><div class="row between"><div>${teamLabel(live.home)}<span class="score">${hg} x ${ag}</span>${teamLabel(live.away)}</div><span class="pill">Em andamento · <b data-timer="${live.id}">${r === null ? '--:--' : fmtTimer(r)}</b></span></div><p class="note" style="margin-top:6px">Aguardando: ${NOME[fora]}</p></div>`;
             }
             h += `<div class="grid3">${TEAMS.map(x => teamCard(day, x)).join('')}</div>`;
             h += dayResults(day);
@@ -836,7 +844,8 @@
         <select id="mAway">${TEAMS.map(t => `<option value="${t}" ${t === da ? 'selected' : ''}>${NOME[t]}</option>`).join('')}</select>
         <button class="btn" data-act="addMatch">${ms.length ? 'Nova partida' : 'Iniciar primeira partida'}</button></div>`;
                 } else {
-                    h += `<p class="note">Partida em andamento. A próxima é criada automaticamente ao encerrar.</p>`;
+                    const r = restante(live);
+                    h += `<p class="note">Partida em andamento · cronômetro: <b data-timer="${live.id}">${r === null ? '--:--' : fmtTimer(r)}</b>. A próxima é criada automaticamente ao encerrar.</p>`;
                 }
                 h += '</div>';
                 h += ms.map((m, i) => matchAdmin(m, day, i, ms)).reverse().join('');
@@ -856,6 +865,7 @@
             };
             return `<div class="card"><div class="row between"><span class="tag">Partida ${i + 1}</span><span class="pill">${m.done ? 'Encerrada' : 'Em andamento'}</span></div>
     <div style="text-align:center; margin:6px 0 2px"><b>${NOME[m.home]}</b><span class="score">${hg} x ${ag}</span><b>${NOME[m.away]}</b></div>
+    ${m.done || !m.startedAt ? '' : `<div class="note" style="text-align:center; margin-bottom:8px">Cronômetro: <b data-timer="${m.id}">${fmtTimer(restante(m))}</b></div>`}
     ${m.events.length ? `<ul class="list" style="margin-top:8px">${m.events.map((e, k) => `<li><span>${dot(e.team)}${esc(pname(e.scorer))}${e.own ? ' <span class="note">(contra)</span>' : ''}${e.assist ? ` <span class="note">&nbsp;assistência: ${esc(pname(e.assist))}</span>` : ''}</span>${m.done ? '' : `<button class="btn ghost small" data-act="delEvent" data-mid="${m.id}" data-idx="${k}">Remover</button>`}</li>`).join('')}</ul>` : '<p class="empty">Nenhum gol ainda.</p>'}
     ${m.done ? `<p class="note" style="margin-top:8px">${rotacaoTexto(m)}</p>` : `<div class="grid2" style="margin-top:12px">${evForm(m.home)}${evForm(m.away)}</div>`}
     <div class="row" style="margin-top:12px">
@@ -1055,6 +1065,39 @@
         });
         document.addEventListener('change', e => { const el = e.target.closest('[data-chg]'); if (el && chg[el.dataset.chg]) chg[el.dataset.chg](el); });
         document.addEventListener('submit', e => { e.preventDefault(); const f = e.target.dataset.form; if (frm[f]) frm[f](e.target); });
+
+        /* ========== Cronômetro da partida e alarme ========== */
+        const alarmeTocado = new Set();
+        let audioCtx = null;
+        function tocarAlarme() {
+            try {
+                audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                [0, 0.4, 0.8].forEach(atraso => {
+                    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+                    o.type = 'square'; o.frequency.value = 880;
+                    o.connect(g); g.connect(audioCtx.destination);
+                    const t0 = audioCtx.currentTime + atraso;
+                    g.gain.setValueAtTime(0.0001, t0);
+                    g.gain.exponentialRampToValueAtTime(0.25, t0 + 0.02);
+                    g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.28);
+                    o.start(t0); o.stop(t0 + 0.3);
+                });
+            } catch (e) { }
+        }
+        function tickTimers() {
+            document.querySelectorAll('[data-timer]').forEach(el => {
+                const m = M(el.dataset.timer);
+                if (!m || m.done || !m.startedAt) return;
+                const rest = DURACAO_PARTIDA - (Date.now() - m.startedAt);
+                if (rest <= 0) {
+                    el.textContent = '00:00 · tempo esgotado';
+                    el.classList.add('tempo-esgotado');
+                    if (!alarmeTocado.has(m.id)) { alarmeTocado.add(m.id); tocarAlarme(); }
+                } else el.textContent = fmtTimer(rest);
+            });
+        }
+        setInterval(tickTimers, 1000);
 
         function render() {
             document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('active', b.dataset.view === view));
