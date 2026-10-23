@@ -498,7 +498,7 @@
         const TEAMS = ['YELLOW', 'BLUE', 'RED'];
         const NOME = { YELLOW: 'AMARELO', BLUE: 'AZUL', RED: 'VERMELHO' };
         const RES = { W: 'V', D: 'E', L: 'D' };
-        const DIAS_ALEATORIO = 45;
+        const PARTIDAS_ALEATORIAS = 7;
         const DURACAO_PARTIDA = 7 * 60 * 1000;
         const PADRAO = { teamSize: 6, pairMemory: 8, watchWindow: 5, minGames: 3 };
 
@@ -644,15 +644,13 @@
         function strength(day, t, st) { const r = roster(day, t); return r.length ? r.reduce((a, id) => a + rating(st[id]), 0) / r.length : 0; }
 
         /* ========== Sorteio ========== */
-        function firstPlayed() { return state.matches.filter(m => m.done).map(m => dayById(m.dayId)?.date).filter(Boolean).sort()[0] || null; }
-        function daysSince(date) { return Math.floor((new Date(todayStr() + 'T00:00') - new Date(date + 'T00:00')) / 864e5); }
-        function currentMode() { const f = firstPlayed(); return f && daysSince(f) >= DIAS_ALEATORIO ? 'balanced' : 'random'; }
+        function partidasEncerradas() { return state.matches.filter(m => m.done).length; }
+        function currentMode() { return partidasEncerradas() >= PARTIDAS_ALEATORIAS ? 'balanced' : 'random'; }
         function modeInfo() {
-            const f = firstPlayed();
-            if (!f) return `Próximo sorteio: aleatório. O período aleatório dura ${DIAS_ALEATORIO} dias a partir da primeira partida registrada.`;
-            const left = DIAS_ALEATORIO - daysSince(f);
-            return left > 0 ? `Próximo sorteio: aleatório. O sorteio balanceado passa a ser obrigatório em ${left} dia${left > 1 ? 's' : ''}.`
-                : `Próximo sorteio: balanceado por estatísticas (obrigatório após ${DIAS_ALEATORIO} dias).`;
+            const restam = PARTIDAS_ALEATORIAS - partidasEncerradas();
+            return restam > 0
+                ? `Próximo sorteio: aleatório. O balanceado por estatísticas passa a valer após a ${PARTIDAS_ALEATORIAS}ª partida encerrada (faltam ${restam}).`
+                : `Próximo sorteio: balanceado por estatísticas (${PARTIDAS_ALEATORIAS}+ partidas encerradas).`;
         }
         const pk = (a, b) => a < b ? a + '|' + b : b + '|' + a;
         function pairCounts(excludeId) {
