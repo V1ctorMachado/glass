@@ -805,25 +805,26 @@
         }
 
         function attText(day) {
-            const n = day.attendees.length, target = state.settings.teamSize * 3;
-            return `${n} selecionados, meta de ${target} (${state.settings.teamSize} por time).${n % 3 ? ' Os times ficarão desiguais.' : ''}`;
+            const att = day.attendees.map(P).filter(Boolean);
+            const nf = att.filter(p => p.pos === 'FIELD').length, ng = att.filter(p => p.pos === 'GK').length, target = state.settings.teamSize * 3;
+            return `${nf} de linha + ${ng} goleiro${ng === 1 ? '' : 'res'} selecionados, meta de ${target} de linha (${state.settings.teamSize} por time).${nf % 3 ? ' Os times de linha ficarão desiguais.' : ''}`;
         }
 
         function dayPanel(day) {
             const st = computeStats();
-            const field = state.players.filter(p => p.pos === 'FIELD' && (p.active || day.attendees.includes(p.id))).sort((a, b) => a.name.localeCompare(b.name));
+            const field = state.players.filter(p => p.active || day.attendees.includes(p.id)).sort((a, b) => (a.pos === b.pos ? 0 : a.pos === 'GK' ? -1 : 1) || a.name.localeCompare(b.name));
             const ms = dayMatches(day.id), locked = ms.length > 0;
-            const nGks = state.players.filter(p => p.pos === 'GK' && p.active).length;
+            const nGks = day.attendees.filter(id => P(id) && P(id).pos === 'GK').length;
             let h = `<div class="row between" style="margin-bottom:20px"><div><h2>${fmtDate(day.date)}</h2><p class="sub" style="margin:0">${[day.time, day.place].filter(Boolean).map(esc).join(' - ') || 'Sem horário ou local definido'}</p></div>
     <div class="row"><button class="btn ghost" data-act="closeDay">Voltar</button><button class="btn ghost" data-act="delDay" data-id="${day.id}">Excluir dia</button></div></div>`;
 
             h += `<div class="card"><h3>Presença</h3><p class="sub" id="attCount">${attText(day)}</p>
     ${locked ? '<p class="sub">A presença está bloqueada porque já existem partidas registradas.</p>' : '<div class="row" style="margin-bottom:12px"><button class="btn ghost small" data-act="attAll">Selecionar todos</button><button class="btn ghost small" data-act="attNone">Limpar</button></div>'}
-    <div class="checks">${field.map(p => `<label><input type="checkbox" data-chg="att" data-id="${p.id}" ${day.attendees.includes(p.id) ? 'checked' : ''} ${locked ? 'disabled' : ''}>${esc(p.name)}</label>`).join('') || '<p class="empty">Nenhum jogador de linha cadastrado.</p>'}</div>
-    <p class="sub" style="margin:12px 0 0">Os goleiros também são sorteados para os times. Se um time ficar sem goleiro, o goleiro do time que folgar agarra o gol dele.</p></div>`;
+    <div class="checks">${field.map(p => `<label><input type="checkbox" data-chg="att" data-id="${p.id}" ${day.attendees.includes(p.id) ? 'checked' : ''} ${locked ? 'disabled' : ''}>${esc(p.name)}${p.pos === 'GK' ? ' <span class="tag">GK</span>' : ''}</label>`).join('') || '<p class="empty">Nenhum jogador cadastrado.</p>'}</div>
+    <p class="sub" style="margin:12px 0 0">Marque também os goleiros que vieram: os goleiros presentes são sorteados entre os times. Se um time ficar sem goleiro, o goleiro do time que folgar agarra o gol dele.</p></div>`;
 
             h += `<div class="card"><h3>Sorteio</h3><p class="sub">${modeInfo()}</p>
-    ${nGks === 0 ? '<p class="flag" style="margin-bottom:12px">Nenhum goleiro ativo cadastrado.</p>' : nGks < 3 ? `<p class="flag" style="margin-bottom:12px">${nGks} goleiro${nGks > 1 ? 's' : ''} no sorteio: um time ficará sem goleiro fixo e usará o goleiro do time que folgar.</p>` : ''}
+    ${nGks === 0 ? '<p class="flag" style="margin-bottom:12px">Nenhum goleiro marcado na presença: os times ficarão sem goleiro.</p>' : nGks < 3 ? `<p class="flag" style="margin-bottom:12px">${nGks} goleiro${nGks > 1 ? 's' : ''} na presença: um time ficará sem goleiro fixo e usará o goleiro do time que folgar.</p>` : ''}
     ${locked ? '<p class="sub" style="margin:0">O sorteio está bloqueado porque já existem partidas registradas neste dia.</p>' : `<button class="btn" data-act="draw">${day.teams ? 'Sortear novamente' : 'Sortear times'}</button>`}</div>`;
 
             if (day.teams) {
@@ -903,13 +904,13 @@
                 lote([...partidas.map(m => ['del', 'matches', m.id]), ['del', 'days', id]]);
                 render();
             },
-            attAll() { const d = curDay(); d.attendees = state.players.filter(p => p.pos === 'FIELD' && p.active).map(p => p.id); put('days', d); },
+            attAll() { const d = curDay(); d.attendees = state.players.filter(p => p.active).map(p => p.id); put('days', d); },
             attNone() { const d = curDay(); d.attendees = []; put('days', d); },
             draw() {
                 const day = curDay();
                 const ids = day.attendees.filter(id => P(id) && P(id).pos === 'FIELD');
                 if (ids.length < 3) { alert('Selecione pelo menos 3 jogadores de linha.'); return; }
-                const gks = shuffle(state.players.filter(p => p.pos === 'GK' && p.active).map(p => p.id));
+                const gks = shuffle(day.attendees.filter(id => P(id) && P(id).pos === 'GK'));
                 const gk = { YELLOW: gks[0] || null, BLUE: gks[1] || null, RED: gks[2] || null }, mode = currentMode();
                 day.teams = mode === 'balanced' ? balancedSplit(ids, day.id, gk) : deal(shuffle(ids.slice()));
                 day.gk = gk; day.mode = mode;
