@@ -576,13 +576,10 @@
         const dot = t => `<span class="dot" style="background:var(--${t.toLowerCase()})"></span>`;
         const teamLabel = t => dot(t) + NOME[t];
         const modeLabel = m => m === 'balanced' ? 'Balanceado por estatísticas' : 'Aleatório';
-        const fmtHora = ts => new Date(ts).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
         function seloSorteio(day) {
-            const hist = day.drawHistory || (day.drawnAt ? [{ at: day.drawnAt, mode: day.mode }] : []);
-            const n = hist.length;
+            const n = (day.drawHistory || (day.drawnAt ? [1] : [])).length;
             if (!n) return '';
-            const detalhe = hist.map(h => `${fmtHora(h.at)}${h.mode ? ' · ' + modeLabel(h.mode) : ''}`).join(' | ');
-            return `<p class="${n > 1 ? 'flag' : 'tag'}" style="margin:4px 0 0">Selo do sorteio: ${n} clique${n > 1 ? 's' : ''} em Sortear — ${detalhe}${n > 1 ? '. Re-sorteios ficam registrados.' : ''}</p>`;
+            return `<p class="${n > 1 ? 'flag' : 'tag'}" style="margin:4px 0 0">Selo do sorteio: ${n} clique${n > 1 ? 's' : ''} em Sortear.</p>`;
         }
         const fmtTimer = ms => { const s = Math.max(0, Math.ceil(ms / 1000)); return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'); };
         const restante = m => m.startedAt ? DURACAO_PARTIDA - (Date.now() - m.startedAt) : null;
@@ -749,7 +746,9 @@
 
         function viewSchedule() {
             const t = todayStr(), ds = sortedDays();
-            const up = ds.filter(d => d.date >= t), past = ds.filter(d => d.date < t).reverse();
+            const encerrado = d => { const ms = state.matches.filter(m => m.dayId === d.id); return ms.length > 0 && ms.every(m => m.done); };
+            const past = ds.filter(d => d.date < t || encerrado(d)).reverse();
+            const up = ds.filter(d => !(d.date < t || encerrado(d)));
             return `<h2>Agenda</h2><p class="sub">Próximos dias de jogo e resultados anteriores.</p>
   <div class="card"><h3>Próximos</h3>${up.length ? `<ul class="list">${up.map(d => `<li><span>${fmtDate(d.date)}${d.time ? ' às ' + esc(d.time) : ''}${d.place ? ' - ' + esc(d.place) : ''}</span><span class="tag">${dayStatus(d)}</span></li>`).join('')}</ul>` : '<p class="empty">Nenhum dia de jogo agendado.</p>'}</div>
   <div class="card"><h3>Anteriores</h3>${past.length ? past.map(d => {
