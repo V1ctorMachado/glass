@@ -576,6 +576,14 @@
         const dot = t => `<span class="dot" style="background:var(--${t.toLowerCase()})"></span>`;
         const teamLabel = t => dot(t) + NOME[t];
         const modeLabel = m => m === 'balanced' ? 'Balanceado por estatísticas' : 'Aleatório';
+        const fmtHora = ts => new Date(ts).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+        function seloSorteio(day) {
+            const hist = day.drawHistory || (day.drawnAt ? [{ at: day.drawnAt, mode: day.mode }] : []);
+            const n = hist.length;
+            if (!n) return '';
+            const detalhe = hist.map(h => `${fmtHora(h.at)}${h.mode ? ' · ' + modeLabel(h.mode) : ''}`).join(' | ');
+            return `<p class="${n > 1 ? 'flag' : 'tag'}" style="margin:4px 0 0">Selo do sorteio: ${n} clique${n > 1 ? 's' : ''} em Sortear — ${detalhe}${n > 1 ? '. Re-sorteios ficam registrados.' : ''}</p>`;
+        }
         const fmtTimer = ms => { const s = Math.max(0, Math.ceil(ms / 1000)); return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'); };
         const restante = m => m.startedAt ? DURACAO_PARTIDA - (Date.now() - m.startedAt) : null;
 
@@ -727,6 +735,7 @@
             let h = '<h2>Times</h2>';
             if (!day) return h + `<p class="sub">Nenhum time sorteado ainda.${next ? ' Próximo dia de jogo: ' + fmtDate(next.date) + '.' : ''}</p>`;
             h += `<p class="sub">${fmtDate(day.date)}${day.time ? ' às ' + esc(day.time) : ''}${day.place ? ' - ' + esc(day.place) : ''} &middot; Sorteio: ${modeLabel(day.mode)}</p>`;
+            h += seloSorteio(day);
             const live = dayMatches(day.id).find(m => !m.done);
             if (live) {
                 const [hg, ag] = score(live), fora = TEAMS.find(x => x !== live.home && x !== live.away), r = restante(live);
@@ -845,7 +854,7 @@
     <div class="checks">${field.map(p => `<label><input type="checkbox" data-chg="att" data-id="${p.id}" ${day.attendees.includes(p.id) ? 'checked' : ''} ${locked ? 'disabled' : ''}>${esc(p.name)}${p.pos === 'GK' ? ' <span class="tag">GK</span>' : ''}</label>`).join('') || '<p class="empty">Nenhum jogador cadastrado.</p>'}</div>
     <p class="sub" style="margin:12px 0 0">Marque também os goleiros que vieram: os goleiros presentes são sorteados entre os times. Se um time ficar sem goleiro, o goleiro do time que folgar agarra o gol dele.</p></div>`;
 
-            h += `<div class="card"><h3>Sorteio</h3><p class="sub">${modeInfo()}</p>
+            h += `<div class="card"><h3>Sorteio</h3><p class="sub">${modeInfo()}</p>${seloSorteio(day)}
     ${nGks === 0 ? '<p class="flag" style="margin-bottom:12px">Nenhum goleiro marcado na presença: os times ficarão sem goleiro.</p>' : nGks < 3 ? `<p class="flag" style="margin-bottom:12px">${nGks} goleiro${nGks > 1 ? 's' : ''} na presença: um time ficará sem goleiro fixo e usará o goleiro do time que folgar.</p>` : ''}
     ${locked ? '<p class="sub" style="margin:0">O sorteio está bloqueado porque já existem partidas registradas neste dia.</p>' : `<button class="btn" data-act="draw">${day.teams ? 'Sortear novamente' : 'Sortear times'}</button>`}</div>`;
 
@@ -932,10 +941,13 @@
                 const day = curDay();
                 const ids = day.attendees.filter(id => P(id) && P(id).pos === 'FIELD');
                 if (ids.length < 3) { alert('Selecione pelo menos 3 jogadores de linha.'); return; }
+                if (day.teams && !confirm('Sortear novamente? Este clique ficará registrado no selo do dia.')) return;
                 const gks = shuffle(day.attendees.filter(id => P(id) && P(id).pos === 'GK'));
                 const gk = { YELLOW: gks[0] || null, BLUE: gks[1] || null, RED: gks[2] || null }, mode = currentMode();
                 day.teams = mode === 'balanced' ? balancedSplit(ids, day.id, gk) : deal(shuffle(ids.slice()));
-                day.gk = gk; day.mode = mode; day.drawnAt = Date.now();
+                day.gk = gk; day.mode = mode;
+                day.drawnAt = Date.now();
+                day.drawHistory = [...(day.drawHistory || []), { at: day.drawnAt, mode }];
                 put('days', day);
             },
             addMatch() {
