@@ -518,7 +518,7 @@
         let state = { settings: { ...PADRAO }, players: [], days: [], matches: [] };
         const loaded = { players: false, days: false, matches: false, config: false };
         let loadError = null, authUser = null, isAdmin = false, authMsg = '';
-        let view = 'teams', openDay = null, rankTab = 'geral', statTab = 'observacao';
+        let view = 'teams', openDay = null, statTab = 'observacao';
 
         if (!firebaseConfig.projectId) {
             $('#app').innerHTML = `<div class="card"><h3>Configuração pendente</h3><p class="sub" style="margin:0">Preencha o objeto <b>firebaseConfig</b> no código com os dados do seu projeto Firebase para começar.</p></div>`;
@@ -759,16 +759,14 @@
 
         function viewRankings() {
             const min = state.settings.minGames;
-            const tabs = `<div class="tabs"><button data-tab="geral" class="${rankTab === 'geral' ? 'active' : ''}">Geral</button><button data-tab="linha" class="${rankTab === 'linha' ? 'active' : ''}">Jogador de linha</button></div>`;
-            const soLinha = rankTab === 'linha';
-            const rows = Object.values(computeStats()).filter(x => x.games >= min && (!soLinha || x.pos === 'FIELD'))
+            const rows = Object.values(computeStats()).filter(x => x.games >= min)
                 .map(x => ({ ...x, v: x.w / x.games }))
                 .sort((a, b) => b.v - a.v || b.games - a.games || a.name.localeCompare(b.name));
             let rank = 0, prev = null;
             rows.forEach((x, i) => { if (x.v !== prev) { rank = i + 1; prev = x.v; } x.rank = rank; });
-            return `<h2>Rankings</h2><p class="sub">Considera apenas partidas encerradas. Mínimo de ${min} jogos para aparecer. Empatados no winrate, quem jogou mais fica na frente.${soLinha ? ' Somente jogadores de linha.' : ' Goleiros incluídos.'}</p>
-  ` + tabs + `<div class="card scroll">${rows.length ? `<table><thead><tr><th>#</th><th>Jogador</th><th class="num">Jogos</th><th class="num">Vitórias</th><th class="num">Empates</th><th class="num">Derrotas</th>${soLinha ? '<th class="num">Gols</th><th class="num">Assistências</th>' : ''}<th class="num">Winrate</th></tr></thead><tbody>
-  ${rows.map(x => `<tr><td>${x.rank}</td><td>${esc(x.name)}${x.pos === 'GK' ? ' <span class="tag">Goleiro</span>' : ''}</td><td class="num">${x.games}</td><td class="num">${x.w}</td><td class="num">${x.d}</td><td class="num">${x.l}</td>${soLinha ? `<td class="num">${x.goals}</td><td class="num">${x.assists}</td>` : ''}<td class="num">${pct(x.w / x.games)}</td></tr>`).join('')}
+            return `<h2>Estatísticas</h2><p class="sub">Considera apenas partidas encerradas. Mínimo de ${min} jogos para aparecer. Empatados no winrate, quem jogou mais fica na frente.</p>
+  <div class="card scroll">${rows.length ? `<table><thead><tr><th>#</th><th>Jogador</th><th class="num">Jogos</th><th class="num">Vitórias</th><th class="num">Empates</th><th class="num">Derrotas</th><th class="num">Gols</th><th class="num">Assistências</th><th class="num">Winrate</th></tr></thead><tbody>
+  ${rows.map(x => `<tr><td>${x.rank}</td><td>${esc(x.name)}${x.pos === 'GK' ? ' <span class="tag">Goleiro</span>' : ''}</td><td class="num">${x.games}</td><td class="num">${x.w}</td><td class="num">${x.d}</td><td class="num">${x.l}</td><td class="num">${x.goals}</td><td class="num">${x.assists}</td><td class="num">${pct(x.w / x.games)}</td></tr>`).join('')}
   </tbody></table>` : '<p class="empty">Sem dados ainda.</p>'}</div>`;
         }
 
@@ -1093,7 +1091,7 @@
         document.addEventListener('click', e => {
             const b = e.target.closest('[data-act],[data-view],[data-tab]'); if (!b) return;
             if (b.dataset.view) { view = b.dataset.view; openDay = null; render(); return; }
-            if (b.dataset.tab) { if (b.dataset.tab === 'geral' || b.dataset.tab === 'linha') rankTab = b.dataset.tab; else statTab = b.dataset.tab; render(); return; }
+            if (b.dataset.tab) { statTab = b.dataset.tab; render(); return; }
             const a = b.dataset.act;
             if (somenteAdmin.has(a) && !isAdmin) return;
             act[a] && act[a](b);
