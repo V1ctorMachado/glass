@@ -597,6 +597,47 @@
             return n ? `${n} partida${n > 1 ? 's' : ''} jogada${n > 1 ? 's' : ''}` : d.teams ? 'Times sorteados' : 'Agendado';
         }
 
+        /* SUBSTITUIÇÃO: em qual time está o jogador, quem foi sorteado e histórico de trocas */
+        function timeDe(day, id) {
+            if (!day.teams) return null;
+            for (const t of TEAMS) {
+                if (day.teams[t].includes(id)) return { t, gk: false };
+                if (day.gk && day.gk[t] === id) return { t, gk: true };
+            }
+            return null;
+        }
+        function sorteados(day) {
+            return day.teams ? TEAMS.flatMap(t => [...(day.gk && day.gk[t] ? [day.gk[t]] : []), ...day.teams[t]]) : [];
+        }
+        function subsInfo(day) {
+            if (!day.subs || !day.subs.length) return '';
+            return `<p class="note" style="margin:4px 0 12px">Substituições: ${day.subs.map(s =>
+                (s.in ? `${esc(pname(s.in))} no lugar de ${esc(pname(s.out))}` : `${esc(pname(s.out))} saiu sem substituto`) + ` (${NOME[s.team]})`
+            ).join('; ')}.</p>`;
+        }
+        function subsCard(day) {
+            const noTime = new Set(sorteados(day));
+            const sairam = [...noTime].filter(id => !day.attendees.includes(id));
+            const naLista = day.attendees.filter(id => P(id) && !noTime.has(id));
+            const optSai = [...noTime].map(id => {
+                const x = timeDe(day, id);
+                return `<option value="${id}" ${sairam[0] === id ? 'selected' : ''}>${esc(pname(id))} (${NOME[x.t]}${x.gk ? ', goleiro' : ''})</option>`;
+            }).join('');
+            const candidatos = state.players.filter(p => p.active && !noTime.has(p.id))
+                .sort((a, b) => (naLista.includes(b.id) - naLista.includes(a.id)) || a.name.localeCompare(b.name));
+            const optEntra = candidatos.map(p =>
+                `<option value="${p.id}" ${naLista[0] === p.id ? 'selected' : ''}>${esc(p.name)}${p.pos === 'GK' ? ' (goleiro)' : ''}${naLista.includes(p.id) ? ' - na lista' : ''}</option>`
+            ).join('');
+            return `<div class="card"><h3>Substituições</h3>
+    <p class="sub">O suplente assume a vaga de quem saiu, no mesmo time. Não conta como novo sorteio.</p>
+    ${sairam.length ? `<p class="flag" style="margin-bottom:6px">Sorteados que saíram da lista: ${sairam.map(id => esc(pname(id))).join(', ')}.</p>` : ''}
+    ${naLista.length ? `<p class="flag" style="margin-bottom:12px">Na lista, mas fora dos times: ${naLista.map(id => esc(pname(id))).join(', ')}.</p>` : ''}
+    <div class="row"><span class="tag">Sai</span><select id="subOut">${optSai}</select>
+    <span class="tag">Entra</span><select id="subIn"><option value="">Ninguém (só para goleiro)</option>${optEntra}</select>
+    <button class="btn" data-act="sub">Substituir</button></div>
+    ${subsInfo(day)}</div>`;
+        }
+
         /* ========== Rodízio: quem ganha fica ========== */
         function streakOf(ms, idx, t) { let n = 0; for (let i = idx; i >= 0; i--) { if (ms[i].home === t || ms[i].away === t) n++; else break; } return n; }
         function plano(m) {
@@ -733,6 +774,7 @@
             if (!day) return h + `<p class="sub">Nenhum time sorteado ainda.${next ? ' Próximo dia de jogo: ' + fmtDate(next.date) + '.' : ''}</p>`;
             h += `<p class="sub">${fmtDate(day.date)}${day.time ? ' às ' + esc(day.time) : ''}${day.place ? ' - ' + esc(day.place) : ''} &middot; Sorteio: ${modeLabel(day.mode)}</p>`;
             h += seloSorteio(day);
+            h += subsInfo(day); /* SUBSTITUIÇÃO */
             const live = dayMatches(day.id).find(m => !m.done);
             if (live) {
                 const [hg, ag] = score(live), fora = TEAMS.find(x => x !== live.home && x !== live.away), r = restante(live);
@@ -859,6 +901,9 @@
                 h += `<p class="sub">Sorteio: ${modeLabel(day.mode)}. Força é a média da avaliação dos jogadores.</p>
       <div class="grid3">${TEAMS.map(t => teamCard(day, t, 'Força ' + strength(day, t, st).toFixed(2))).join('')}</div>`;
 
+                /* SUBSTITUIÇÃO: liberada até a primeira partida; depois, só mostra o histórico */
+                if (!locked) h += subsCard(day); else h += subsInfo(day);
+
                 const live = ms.find(m => !m.done), last = ms[ms.length - 1];
                 const tiePending = last && last.done && plano(last).tie;
                 h += `<div class="card"><h3>Partidas</h3><p class="sub">Regra de rodízio: quem vence permanece e enfrenta o time que estava fora. Em caso de empate, sai o time que está há mais partidas seguidas em campo. Se os dois entraram juntos, o administrador escolhe quem sai.</p>`;
@@ -918,7 +963,7 @@
         }
 
         /* ========== Ações ========== */
-        const somenteAdmin = new Set(['openDay', 'delDay', 'attAll', 'attNone', 'draw', 'addMatch', 'addGoal', 'delEvent', 'finish', 'reopen', 'leave', 'delMatch', 'rename', 'toggleActive', 'delPlayer', 'sample', 'reset']);
+        const somenteAdmin = new Set(['openDay', 'delDay', 'attAll', 'attNone', 'draw', 'addMatch', 'addGoal', 'delEvent', 'finish', 'reopen', 'leave', 'delMatch', 'rename', 'toggleActive', 'delPlayer', 'sample', 'reset', 'sub']);
 
         const act = {
             theme() { aplicarTema(document.documentElement.dataset.theme === 'escuro' ? 'claro' : 'escuro'); },
@@ -945,6 +990,20 @@
                 day.gk = gk; day.mode = mode;
                 day.drawnAt = Date.now();
                 day.drawHistory = [...(day.drawHistory || []), { at: day.drawnAt, mode }];
+                put('days', day);
+            },
+            /* SUBSTITUIÇÃO: suplente assume a vaga de quem saiu, no mesmo time, sem novo sorteio */
+            sub() {
+                const day = curDay(), out = $('#subOut').value, inn = $('#subIn').value;
+                const pos = timeDe(day, out); if (!pos) return;
+                const pOut = P(out), pIn = inn ? P(inn) : null;
+                if (!pIn && !pos.gk) { alert('Selecione quem entra.'); return; }
+                if (pIn && pOut && pIn.pos !== pOut.pos) { alert('Quem entra deve ter a mesma posição de quem sai: linha por linha, goleiro por goleiro.'); return; }
+                if (!confirm(pIn ? `${pIn.name} entra no lugar de ${pname(out)} no ${NOME[pos.t]}?` : `${pname(out)} sai e o ${NOME[pos.t]} fica sem goleiro (usará o emprestado)?`)) return;
+                if (pos.gk) { day.gk = day.gk || { YELLOW: null, BLUE: null, RED: null }; day.gk[pos.t] = inn || null; }
+                else day.teams[pos.t][day.teams[pos.t].indexOf(out)] = inn;
+                day.attendees = [...new Set([...day.attendees.filter(x => x !== out), ...(inn ? [inn] : [])])];
+                day.subs = [...(day.subs || []), { out, in: inn || null, team: pos.t, at: Date.now() }];
                 put('days', day);
             },
             addMatch() {
