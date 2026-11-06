@@ -819,7 +819,6 @@
             if (!day) return h + `<p class="sub">Nenhum time sorteado ainda.${next ? ' Próximo dia de jogo: ' + fmtDate(next.date) + '.' : ''}</p>`;
             h += `<p class="sub">${fmtDate(day.date)}${day.time ? ' às ' + esc(day.time) : ''}${day.place ? ' - ' + esc(day.place) : ''} &middot; Sorteio: ${modeLabel(day.mode)}</p>`;
             h += seloSorteio(day);
-            h += subsInfo(day); /* SUBSTITUIÇÃO */
             const live = dayMatches(day.id).find(m => !m.done);
             if (live) {
                 const [hg, ag] = score(live), fora = TEAMS.find(x => x !== live.home && x !== live.away);
