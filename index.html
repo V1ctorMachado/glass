@@ -597,6 +597,17 @@
             if (r <= 0) return '00:00 · tempo esgotado';
             return fmtTimer(r) + (rodando(m) ? '' : ' · pausado');
         }
+        /* FINALIZAÇÃO: horário em que a partida terminou e cronômetro congelado */
+        function fimTxt(m) {
+            if (!m.done) return '';
+            const partes = [];
+            if (m.endedAt) partes.push('Encerrada às ' + new Date(m.endedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
+            if (m.runningSince !== undefined) {
+                const r = restante(m);
+                partes.push('cronômetro parou em ' + (r <= 0 ? '00:00 (tempo esgotado)' : fmtTimer(r)) + ' · tempo jogado ' + fmtTimer(decorrido(m)));
+            }
+            return partes.join(' · ');
+        }
         function congelar(m) { const r = relogio(m); m.elapsed = r.elapsed + (r.since ? Date.now() - r.since : 0); m.runningSince = null; }
 
         function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1));[a[i], a[j]] = [a[j], a[i]]; } return a; }
@@ -786,7 +797,7 @@
             const [h, a] = score(m), sc = {};
             m.events.forEach(e => { const k = e.own ? e.scorer + '|c' : e.scorer; sc[k] = (sc[k] || 0) + 1; });
             const names = Object.entries(sc).map(([id, n]) => { const c = id.endsWith('|c'); return esc(pname(c ? id.slice(0, -2) : id)) + (c ? ' (contra)' : '') + (n > 1 ? ` (${n})` : ''); }).join(', ');
-            return `<li style="display:block"><div>${teamLabel(m.home)} <b>&nbsp;${h} x ${a}&nbsp;</b> ${teamLabel(m.away)}</div>${names ? `<div class="note">Gols: ${names}</div>` : ''}</li>`;
+            return `<li style="display:block"><div>${teamLabel(m.home)} <b>&nbsp;${h} x ${a}&nbsp;</b> ${teamLabel(m.away)}</div>${names ? `<div class="note">Gols: ${names}</div>` : ''}${fimTxt(m) ? `<div class="note">${fimTxt(m)}</div>` : ''}</li>`;
         }
         function dayResults(day) {
             const ms = dayMatches(day.id).filter(m => m.done);
@@ -977,7 +988,7 @@
     ${m.done ? '' : `<div class="row" style="justify-content:center; margin:4px 0 8px"><span class="note">Cronômetro: <b data-timer="${m.id}">${timerTxt(m)}</b></span>
       ${rodando(m) ? `<button class="btn ghost small" data-act="pause" data-mid="${m.id}">Pausar</button>` : `<button class="btn small" data-act="play" data-mid="${m.id}">${iniciado(m) ? 'Retomar' : 'Iniciar'}</button>`}</div>`}
     ${m.events.length ? `<ul class="list" style="margin-top:8px">${m.events.map((e, k) => `<li><span>${dot(e.team)}${esc(pname(e.scorer))}${e.own ? ' <span class="note">(contra)</span>' : ''}${e.assist ? ` <span class="note">&nbsp;assistência: ${esc(pname(e.assist))}</span>` : ''}</span>${m.done ? '' : `<button class="btn ghost small" data-act="delEvent" data-mid="${m.id}" data-idx="${k}">Remover</button>`}</li>`).join('')}</ul>` : '<p class="empty">Nenhum gol ainda.</p>'}
-    ${m.done ? `<p class="note" style="margin-top:8px">${rotacaoTexto(m)}</p>` : `<div class="grid2" style="margin-top:12px">${evForm(m.home)}${evForm(m.away)}</div>`}
+    ${m.done ? `${fimTxt(m) ? `<p class="note" style="text-align:center; margin-top:4px"><b>${fimTxt(m)}</b></p>` : ''}<p class="note" style="margin-top:8px">${rotacaoTexto(m)}</p>` : `<div class="grid2" style="margin-top:12px">${evForm(m.home)}${evForm(m.away)}</div>`}
     <div class="row" style="margin-top:12px">
       ${m.done ? (canReopen(m, ms) ? `<button class="btn ghost small" data-act="reopen" data-mid="${m.id}">Reabrir</button>` : '') : `<button class="btn small" data-act="finish" data-mid="${m.id}">Encerrar partida</button>`}
       ${isLast ? `<button class="btn ghost small" data-act="delMatch" data-mid="${m.id}">Excluir partida</button>` : ''}
@@ -1082,6 +1093,7 @@
                 const m = M(b.dataset.mid);
                 const ms = dayMatches(m.dayId), isLast = ms[ms.length - 1].id === m.id;
                 congelar(m); /* CRONÔMETRO: para o relógio ao encerrar */
+                m.endedAt = Date.now(); /* FINALIZAÇÃO: guarda o horário do fim */
                 m.done = true;
                 const p = plano(m);
                 const ops = [['set', 'matches', m]];
@@ -1090,7 +1102,7 @@
             },
             async reopen(b) {
                 const m = M(b.dataset.mid), ms = dayMatches(m.dayId), next = ms[ms.findIndex(x => x.id === m.id) + 1];
-                m.done = false;
+                m.done = false; m.endedAt = null; /* FINALIZAÇÃO: ao reabrir, o horário do fim é apagado */
                 const ops = [['set', 'matches', m]];
                 if (next) ops.push(['del', 'matches', next.id]);
                 await lote(ops);
