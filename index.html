@@ -792,6 +792,13 @@
             const leave = sh > sa ? m.home : m.away;
             return { stay: leave === m.home ? m.away : m.home, leave, waiting, motivo: 'empate' };
         }
+        const adversario = (m, t) => t === m.home ? m.away : m.home;
+        /* MURALHA: remove as muralhas do time que sofreu gol e devolve os nomes removidos */
+        function tirarMuralha(m, time) {
+            const saem = (m.muralha || []).filter(x => x.team === time);
+            m.muralha = (m.muralha || []).filter(x => x.team !== time);
+            return saem.map(x => pname(x.player));
+        }
         function novaPartida(dayId, home, away) { return { id: uid(), dayId, home, away, events: [], done: false, created: Date.now(), elapsed: 0, runningSince: null }; }
         function canReopen(m, ms) {
             const idx = ms.findIndex(x => x.id === m.id);
@@ -1050,7 +1057,6 @@
 
                 /* SUBSTITUIÇÃO: liberada até a primeira partida; depois, só mostra o histórico */
                 if (!locked) h += subsCard(day); else h += subsInfo(day);
-                h += destaquesDia(day); /* DESTAQUES DO DIA */
 
                 const live = ms.find(m => !m.done), last = ms[ms.length - 1];
                 const tiePending = last && last.done && plano(last).tie;
@@ -1174,7 +1180,10 @@
             addGoal(b) {
                 const m = M(b.dataset.mid), t = b.dataset.team, sel = $(`#sel-${m.id}-${t}`).value;
                 if (!sel) { alert('Selecione o jogador.'); return; }
-                m.events.push({ team: t, scorer: sel, assist: null }); put('matches', m);
+                m.events.push({ team: t, scorer: sel, assist: null });
+                const saiu = tirarMuralha(m, adversario(m, t)); /* MURALHA: quem sofreu gol perde a muralha na hora */
+                put('matches', m);
+                if (saiu.length) alert(`Muralha removida (${saiu.join(', ')}): o ${NOME[adversario(m, t)]} sofreu gol.`);
             },
             addAssist(b) {
                 const m = M(b.dataset.mid), t = b.dataset.team, sel = $(`#sel-${m.id}-${t}`).value;
@@ -1188,7 +1197,10 @@
             addOwn(b) {
                 const m = M(b.dataset.mid), t = b.dataset.team, sel = $(`#sel-${m.id}-${t}`).value;
                 if (!sel) { alert('Selecione o jogador.'); return; }
-                m.events.push({ team: TEAMS.find(x => x !== t), scorer: sel, own: true, assist: null }); put('matches', m);
+                m.events.push({ team: adversario(m, t), scorer: sel, own: true, assist: null }); /* gol contra conta para o adversário desta partida */
+                const saiu = tirarMuralha(m, t);
+                put('matches', m);
+                if (saiu.length) alert(`Muralha removida (${saiu.join(', ')}): o ${NOME[t]} sofreu gol.`);
             },
             /* MURALHA: o admin marca o jogador de linha que segurou a defesa numa partida sem sofrer gol */
             addMuralha(b) {
