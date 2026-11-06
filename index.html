@@ -436,6 +436,31 @@
             border-color: var(--blue)
         }
 
+        .evbtn.mur {
+            color: var(--text);
+            border-color: var(--text);
+            grid-column: 1 / -1
+        }
+
+        .notas-todas summary { cursor: pointer; font-size: 13px; color: var(--muted); margin-top: 4px }
+        .notas-todas .list li { font-size: 14px }
+        .nota-chip { display: inline-block; min-width: 42px; text-align: center; font-weight: 700; border-radius: 6px; padding: 2px 6px; color: #fff }
+
+        /* TOPS DO DIA */
+        .tops { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin-bottom: 20px }
+        .tp-card { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; background: var(--bg) }
+        .tp-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px }
+        .tp-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em }
+        .tp-unit { font-size: 11px; color: var(--muted) }
+        .tp-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line) }
+        .tp-row:last-child { border-bottom: none }
+        .tp-pos { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: #fff; flex-shrink: 0 }
+        :root[data-theme="escuro"] .tp-pos { color: #111 }
+        .tp-pos.p1 { background: var(--gold) } .tp-pos.p2 { background: var(--silver) } .tp-pos.p3 { background: var(--bronze) }
+        .tp-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500 }
+        .tp-team { font-size: 11px; color: var(--muted) }
+        .tp-val { font-size: 20px; font-weight: 700; line-height: 1 }
+
         .evbtn.og {
             color: var(--red);
             border-color: var(--red)
@@ -695,82 +720,65 @@
     ${subsInfo(day)}</div>`;
         }
 
-        /* DESTAQUES DO DIA: prêmios por categoria + top 3 de linha (winrate, desempate pelo saldo) + top 3 goleiros */
-        const MIN_MURALHA = 2;
-        /* PONTUAÇÃO DO DIA: pesos de cada quesito. Para mudar, basta trocar os números. */
-        const PESOS = { winrate: 1, gol: 2, assist: 1, muralha: 2 };
-        const fmt1 = n => n.toFixed(1).replace('.', ',');
+        /* DESTAQUES DO DIA: nota estilo SofaScore + 3 prêmios (Artilheiro/Garçom, Muralha, Paredão) */
         const sinal = n => (n > 0 ? '+' : '') + n;
+        const fmt1 = n => n.toFixed(1).replace('.', ',');
+        /* NOTA: todo mundo começa com 6,0 e cada lance soma ou tira pontos. Para ajustar, troque os números. */
+        const NOTA = { base: 6.0, gol: 1.0, assist: 0.5, muralha: 0.75, vitoria: 0.3, derrota: -0.3, golContra: -0.5, min: 3.0, max: 10.0 };
+        function notaJogador(x) {
+            const n = NOTA.base + NOTA.gol * x.goals + NOTA.assist * x.assists + NOTA.muralha * x.muralhas
+                + NOTA.vitoria * x.w + NOTA.derrota * x.l + NOTA.golContra * x.golsContra;
+            return Math.min(NOTA.max, Math.max(NOTA.min, n));
+        }
+        const corNota = n => n >= 8 ? '#1d7fd8' : n >= 7 ? '#16a34a' : n >= 6.5 ? '#65a30d' : n >= 6 ? '#ca8a04' : '#dc2626';
+        const chip = n => `<span class="nota-chip" style="background:${corNota(n)}">${fmt1(n)}</span>`;
+
         function destaquesDia(day) {
             const feitas = state.matches.filter(m => m.dayId === day.id && m.done).length;
             if (!feitas) return '';
             const st = Object.values(computeStats(day.id));
-            const campo = st.filter(x => x.pos === 'FIELD' && x.games > 0)
-                .map(x => ({ ...x, wr: x.w / x.games, saldo: x.pro - x.contra, ga: x.goals + x.assists, sofridos: x.contra / x.games }));
-            /* PONTUAÇÃO DO DIA: nota de 0 a 10 em cada quesito, média ponderada pelos PESOS */
-            const elegiveis = campo.filter(x => x.games >= MIN_MURALHA);
-            if (elegiveis.length) {
-                const maxG = Math.max(...elegiveis.map(x => x.goals)), maxA = Math.max(...elegiveis.map(x => x.assists));
-                const melhorS = Math.min(...elegiveis.map(x => x.sofridos)), piorS = Math.max(...elegiveis.map(x => x.sofridos));
-                const somaPesos = Object.values(PESOS).reduce((a, b) => a + b, 0);
-                elegiveis.forEach(x => {
-                    x.n = {
-                        winrate: 10 * x.wr,                                          // 100% de vitórias = 10
-                        gol: maxG > 0 ? 10 * x.goals / maxG : 0,                     // quem fez mais gols no dia = 10
-                        assist: maxA > 0 ? 10 * x.assists / maxA : 0,                // quem deu mais assistências no dia = 10
-                        muralha: piorS > melhorS ? 10 * (piorS - x.sofridos) / (piorS - melhorS) : 10  // menos gols sofridos por jogo = 10
-                    };
-                    x.nota = Object.keys(PESOS).reduce((a, k) => a + x.n[k] * PESOS[k], 0) / somaPesos;
-                });
-            }
-            const linha = elegiveis.slice()
-                .sort((a, b) => b.nota - a.nota || b.wr - a.wr || b.saldo - a.saldo || b.games - a.games || a.name.localeCompare(b.name))
-                .slice(0, 3);
+            const campo = st.filter(x => x.pos === 'FIELD' && x.games > 0).map(x => ({ ...x, nota: notaJogador(x) }));
+            const todos = campo.concat(st.filter(x => x.pos === 'GK' && x.games > 0).map(x => ({ ...x, nota: notaJogador(x) })));
+            const ranking = campo.slice().sort((a, b) => b.nota - a.nota || b.goals - a.goals || b.muralhas - a.muralhas || b.w - a.w || a.name.localeCompare(b.name));
             const gks = st.filter(x => x.pos === 'GK' && x.gkGames > 0)
                 .map(x => ({ ...x, media: x.conceded / x.gkGames }))
-                .sort((a, b) => a.media - b.media || b.gkGames - a.gkGames || a.name.localeCompare(b.name))
-                .slice(0, 3);
+                .sort((a, b) => a.media - b.media || b.gkGames - a.gkGames || a.name.localeCompare(b.name));
 
             const plural = (n, s, p) => `${n} ${n === 1 ? s : p}`;
-            const nomes = rs => rs.length > 3 ? rs.slice(0, 3).map(x => esc(x.name)).join(', ') + ` e mais ${rs.length - 3}` : rs.map(x => esc(x.name)).join(rs.length === 2 ? ' e ' : ', ');
-            // Vencedores de um prêmio: todos empatados no melhor valor
-            const premio = (rs, chave, maior) => {
-                if (!rs.length) return [];
-                const melhor = maior ? Math.max(...rs.map(chave)) : Math.min(...rs.map(chave));
-                return rs.filter(x => chave(x) === melhor);
+            const time = id => { const t = timeDe(day, id); return t ? `${dot(t.t)}${NOME[t.t]}` : ''; };
+
+            /* TOPS DO DIA: top 3 de cada quesito; empatados dividem a mesma posição */
+            const top3 = (rs, chave) => {
+                const ord = rs.filter(x => chave(x) > 0).sort((a, b) => chave(b) - chave(a) || b.nota - a.nota || a.name.localeCompare(b.name)).slice(0, 3);
+                let pos = 0, prev = null;
+                return ord.map((x, i) => { if (chave(x) !== prev) { pos = i + 1; prev = chave(x); } return { ...x, pos, v: chave(x) }; });
             };
-            const comGol = campo.concat(st.filter(x => x.pos === 'GK')).filter(x => x.goals > 0);
-            const comAss = campo.concat(st.filter(x => x.pos === 'GK')).filter(x => x.assists > 0);
-            const artilheiro = premio(comGol, x => x.goals, true);
-            const garcom = premio(comAss, x => x.assists, true);
-            const muralhaBase = campo.filter(x => x.games >= MIN_MURALHA);
-            let muralha = premio(muralhaBase, x => x.sofridos, false);
-            if (muralha.length > 1) muralha = premio(muralha, x => x.games, true);   // desempate: quem jogou mais
-            if (muralha.length > 1) muralha = premio(muralha, x => x.saldo, true);   // depois: maior saldo
+            const topCard = (titulo, unidade, rs, vazio) => `<div class="tp-card">
+          <div class="tp-head"><span class="tp-title">${titulo}</span><span class="tp-unit">${unidade}</span></div>
+          ${rs.length ? rs.map(x => `<div class="tp-row"><span class="tp-pos p${x.pos}">${x.pos}</span>
+            <div class="tp-name">${esc(x.name)}<div class="tp-team">${time(x.id)}</div></div><span class="tp-val">${x.v}</span></div>`).join('')
+                : `<p class="empty">${vazio}</p>`}</div>`;
 
-            const card = (titulo, rs, valor, vazio) => `<div class="award"><div class="award-title">${titulo}</div>
-          ${rs.length ? `<div class="award-name">${nomes(rs)}</div><div class="award-val">${valor(rs[0])}</div>` : `<div class="award-val" style="margin-top:6px">${vazio}</div>`}</div>`;
-
-            const time = id => { const t = timeDe(day, id); return t ? `${dot(t.t)}${NOME[t.t]} · ` : ''; };
-            const item = (x, i, valor, rotulo, detalhe) => `<div class="pd p${i + 1}">
+            const item = (x, i) => `<div class="pd p${i + 1}">
           <div class="pd-pos">${i + 1}</div>
-          <div class="pd-main"><div class="pd-name">${esc(x.name)}</div><div class="pd-sub">${time(x.id)}${detalhe}</div></div>
-          <div class="pd-val"><b>${valor}</b><span>${rotulo}</span></div></div>`;
-            const col = (titulo, rs, fn) => `<div><p class="dest-col-title">${titulo}</p>${rs.length ? rs.map(fn).join('') : '<p class="empty">Sem dados ainda.</p>'}</div>`;
+          <div class="pd-main"><div class="pd-name">${esc(x.name)}</div><div class="pd-sub">${time(x.id)}</div></div>
+          <div class="pd-val"><b style="color:${corNota(x.nota)}">${fmt1(x.nota)}</b><span>nota</span></div></div>`;
+            const resumo = x => [x.goals && plural(x.goals, 'gol', 'gols'), x.assists && plural(x.assists, 'assist.', 'assist.'), x.muralhas && plural(x.muralhas, 'muralha', 'muralhas'), `${x.w}V ${x.d}E ${x.l}D`].filter(Boolean).join(' · ');
 
             return `<div class="card"><div class="dest-head"><h3>Destaques do dia</h3><span class="note">${plural(feitas, 'partida encerrada', 'partidas encerradas')}</span></div>
-      <div class="awards">
-        ${card('Artilheiro', artilheiro, x => plural(x.goals, 'gol', 'gols'), 'Nenhum gol ainda.')}
-        ${card('Garçom', garcom, x => plural(x.assists, 'assistência', 'assistências'), 'Nenhuma assistência ainda.')}
-        ${card('Muralha', muralha, x => `${x.sofridos.toFixed(1).replace('.', ',')} gols sofridos por jogo · ${plural(x.games, 'jogo', 'jogos')}`, `Precisa de ${MIN_MURALHA} jogos no dia.`)}
+      <div class="tops">
+        ${topCard('Artilheiros', 'gols', top3(todos, x => x.goals), 'Nenhum gol ainda.')}
+        ${topCard('Garçons', 'assistências', top3(todos, x => x.assists), 'Nenhuma assistência ainda.')}
+        ${topCard('Muralhas', 'jogos sem sofrer gol', top3(campo, x => x.muralhas), 'Nenhuma muralha marcada ainda.')}
       </div>
       <div class="dest-grid">
-        ${col('Pontuação do dia (linha)', linha, (x, i) => item(x, i, fmt1(x.nota), 'pontos',
-                `${pct(x.wr)} de vitórias · ${x.goals}G ${x.assists}A · ${fmt1(x.sofridos)} sofrido/jogo<br>Notas: vitórias ${fmt1(x.n.winrate)} · gols ${fmt1(x.n.gol)} · assist. ${fmt1(x.n.assist)} · muralha ${fmt1(x.n.muralha)}`))}
-        ${col('Paredão (goleiros)', gks, (x, i) => item(x, i, x.media.toFixed(1).replace('.', ','), 'gols por jogo',
-                `${plural(x.conceded, 'gol sofrido', 'gols sofridos')} em ${plural(x.gkGames, 'jogo', 'jogos')}`))}
-      </div>
-      <p class="note" style="margin-top:6px">Pontuação do dia: cada jogador de linha com pelo menos ${MIN_MURALHA} jogos recebe uma nota de 0 a 10 em quatro quesitos (winrate; gols e assistências comparados com o melhor do dia; muralha, comparando os gols sofridos por jogo do melhor e do pior do dia). A pontuação é a média ponderada com pesos: vitórias ${PESOS.winrate}, gols ${PESOS.gol}, assistências ${PESOS.assist}, muralha ${PESOS.muralha}. Muralha: jogador de linha cujo time sofreu menos gols por jogo com ele em campo, mínimo de ${MIN_MURALHA} jogos. Paredão: goleiro com menos gols sofridos por jogo.</p></div>`;
+        <div><p class="dest-col-title">Melhores notas</p>${ranking.length ? ranking.slice(0, 3).map(item).join('') : '<p class="empty">Sem dados ainda.</p>'}
+          ${ranking.length > 3 ? `<details class="notas-todas"><summary>Ver a nota de todos (${ranking.length} jogadores)</summary><ul class="list" style="margin-top:6px">${ranking.map((x, i) => `<li><span>${i + 1}. ${esc(x.name)} <span class="note">&nbsp;${resumo(x)}</span></span>${chip(x.nota)}</li>`).join('')}</ul></details>` : ''}</div>
+        <div><p class="dest-col-title">Paredão</p>${gks.length ? gks.slice(0, 3).map((x, i) => `<div class="pd p${i + 1}">
+          <div class="pd-pos">${i + 1}</div>
+          <div class="pd-main"><div class="pd-name">${esc(x.name)}</div><div class="pd-sub">${time(x.id)} · ${plural(x.conceded, 'gol sofrido', 'gols sofridos')} em ${plural(x.gkGames, 'jogo', 'jogos')}</div></div>
+          <div class="pd-val"><b>${fmt1(x.media)}</b><span>por jogo</span></div></div>`).join('') : '<p class="empty">Sem goleiros no gol ainda.</p>'}</div>
+      </div></div>`;
         }
 
         /* ========== Rodízio: quem ganha fica ========== */
@@ -796,7 +804,7 @@
         /* ========== Estatísticas ========== */
         function computeStats(soDia) {
             const s = {};
-            state.players.forEach(p => s[p.id] = { id: p.id, name: p.name, pos: p.pos, active: p.active, games: 0, w: 0, d: 0, l: 0, goals: 0, assists: 0, gkGames: 0, conceded: 0, pro: 0, contra: 0, log: [] });
+            state.players.forEach(p => s[p.id] = { id: p.id, name: p.name, pos: p.pos, active: p.active, games: 0, w: 0, d: 0, l: 0, goals: 0, assists: 0, gkGames: 0, conceded: 0, pro: 0, contra: 0, muralhas: 0, golsContra: 0, log: [] });
             const order = {}; sortedDays().forEach((d, i) => order[d.id] = i);
             state.matches
                 .filter(m => m.done && dayById(m.dayId)?.teams && (!soDia || m.dayId === soDia))
@@ -806,7 +814,9 @@
                     m.events.forEach(e => {
                         if (s[e.scorer] && !e.own) { s[e.scorer].goals++; ga[e.scorer] = (ga[e.scorer] || 0) + 1; }
                         if (e.assist && s[e.assist]) { s[e.assist].assists++; ga[e.assist] = (ga[e.assist] || 0) + 1; }
+                        if (e.own && s[e.scorer]) s[e.scorer].golsContra++;
                     });
+                    (m.muralha || []).forEach(x => { if (s[x.player]) s[x.player].muralhas++; }); /* MURALHA marcada pelo admin */
                     [[m.home, ag], [m.away, hg]].forEach(([t, contra]) => { const gk = gkOf(day, m, t); if (gk && s[gk]) { s[gk].gkGames++; s[gk].conceded += contra; } });
                     [[m.home, hg, ag], [m.away, ag, hg]].forEach(([t, f, a]) => {
                         const r = f > a ? 'W' : f < a ? 'L' : 'D';
@@ -887,7 +897,7 @@
             const [h, a] = score(m), sc = {};
             m.events.forEach(e => { const k = e.own ? e.scorer + '|c' : e.scorer; sc[k] = (sc[k] || 0) + 1; });
             const names = Object.entries(sc).map(([id, n]) => { const c = id.endsWith('|c'); return esc(pname(c ? id.slice(0, -2) : id)) + (c ? ' (contra)' : '') + (n > 1 ? ` (${n})` : ''); }).join(', ');
-            return `<li style="display:block"><div>${teamLabel(m.home)} <b>&nbsp;${h} x ${a}&nbsp;</b> ${teamLabel(m.away)}</div>${names ? `<div class="note">Gols: ${names}</div>` : ''}${fimTxt(m) ? `<div class="note">${fimTxt(m)}</div>` : ''}</li>`;
+            return `<li style="display:block"><div>${teamLabel(m.home)} <b>&nbsp;${h} x ${a}&nbsp;</b> ${teamLabel(m.away)}</div>${names ? `<div class="note">Gols: ${names}</div>` : ''}${(m.muralha || []).length ? `<div class="note">Muralha: ${m.muralha.map(x => esc(pname(x.player))).join(', ')}</div>` : ''}${fimTxt(m) ? `<div class="note">${fimTxt(m)}</div>` : ''}</li>`;
         }
         function dayResults(day) {
             const ms = dayMatches(day.id).filter(m => m.done);
@@ -942,8 +952,8 @@
             let rank = 0, prev = null;
             rows.forEach((x, i) => { if (x.v !== prev) { rank = i + 1; prev = x.v; } x.rank = rank; });
             return `<h2>Estatísticas</h2><p class="sub">Considera apenas partidas encerradas. Mínimo de ${min} jogos para aparecer. Empatados no winrate, quem jogou mais fica na frente. Saldo = gols do time menos gols sofridos nas partidas em que o jogador esteve em campo.</p>
-  <div class="card scroll">${rows.length ? `<table><thead><tr><th>#</th><th>Jogador</th><th class="num">Jogos</th><th class="num">Vitórias</th><th class="num">Empates</th><th class="num">Derrotas</th><th class="num">Gols</th><th class="num">Assistências</th><th class="num">Saldo</th><th class="num">Winrate</th></tr></thead><tbody>
-  ${rows.map(x => `<tr><td>${x.rank}</td><td>${esc(x.name)}${x.pos === 'GK' ? ' <span class="tag">Goleiro</span>' : ''}</td><td class="num">${x.games}</td><td class="num">${x.w}</td><td class="num">${x.d}</td><td class="num">${x.l}</td><td class="num">${x.goals}</td><td class="num">${x.assists}</td><td class="num">${sinal(x.pro - x.contra)}</td><td class="num">${pct(x.w / x.games)}</td></tr>`).join('')}
+  <div class="card scroll">${rows.length ? `<table><thead><tr><th>#</th><th>Jogador</th><th class="num">Jogos</th><th class="num">Vitórias</th><th class="num">Empates</th><th class="num">Derrotas</th><th class="num">Gols</th><th class="num">Assistências</th><th class="num">Muralha</th><th class="num">Saldo</th><th class="num">Winrate</th></tr></thead><tbody>
+  ${rows.map(x => `<tr><td>${x.rank}</td><td>${esc(x.name)}${x.pos === 'GK' ? ' <span class="tag">Goleiro</span>' : ''}</td><td class="num">${x.games}</td><td class="num">${x.w}</td><td class="num">${x.d}</td><td class="num">${x.l}</td><td class="num">${x.goals}</td><td class="num">${x.assists}</td><td class="num">${x.muralhas}</td><td class="num">${sinal(x.pro - x.contra)}</td><td class="num">${pct(x.w / x.games)}</td></tr>`).join('')}
   </tbody></table>` : '<p class="empty">Sem dados ainda.</p>'}</div>`;
         }
 
@@ -1070,12 +1080,13 @@
                 return `<div class="card" style="margin:0; padding:12px"><div style="text-align:center; font-weight:600; margin-bottom:8px">${dot(t)}${NOME[t]}</div>
       <div class="note" style="text-align:center; margin-bottom:6px">Goleiro: ${gk ? esc(pname(gk)) + (day.gk && day.gk[t] ? '' : ' (emprestado)') : 'nenhum'}</div>
       <select id="sel-${m.id}-${t}" style="width:100%; margin-bottom:8px"><option value="">Jogador...</option>${opts}</select>
-      <div class="evgrid"><button class="evbtn gol" data-act="addGoal" data-mid="${m.id}" data-team="${t}">Gol</button><button class="evbtn ass" data-act="addAssist" data-mid="${m.id}" data-team="${t}">Assist.</button><button class="evbtn og" data-act="addOwn" data-mid="${m.id}" data-team="${t}">Contra</button></div></div>`;
+      <div class="evgrid"><button class="evbtn gol" data-act="addGoal" data-mid="${m.id}" data-team="${t}">Gol</button><button class="evbtn ass" data-act="addAssist" data-mid="${m.id}" data-team="${t}">Assist.</button><button class="evbtn og" data-act="addOwn" data-mid="${m.id}" data-team="${t}">Contra</button><button class="evbtn mur" data-act="addMuralha" data-mid="${m.id}" data-team="${t}">Muralha</button></div></div>`;
             };
             return `<div class="card"><div class="row between"><span class="tag">Partida ${i + 1}</span><span class="pill">${m.done ? 'Encerrada' : 'Em andamento'}</span></div>
     <div style="text-align:center; margin:6px 0 2px"><b>${NOME[m.home]}</b><span class="score">${hg} x ${ag}</span><b>${NOME[m.away]}</b></div>
     ${m.done ? '' : `<div class="row" style="justify-content:center; margin:4px 0 8px"><span class="note">Cronômetro: <b data-timer="${m.id}">${timerTxt(m)}</b></span>
       ${rodando(m) ? `<button class="btn ghost small" data-act="pause" data-mid="${m.id}">Pausar</button>` : `<button class="btn small" data-act="play" data-mid="${m.id}">${iniciado(m) ? 'Retomar' : 'Iniciar'}</button>`}</div>`}
+    ${(m.muralha || []).length ? `<p class="note" style="margin-top:8px">Muralha: ${m.muralha.map((x, k) => `${dot(x.team)}${esc(pname(x.player))}${m.done ? '' : ` <button class="btn ghost small" data-act="delMuralha" data-mid="${m.id}" data-idx="${k}">Remover</button>`}`).join(' &nbsp; ')}</p>` : ''}
     ${m.events.length ? `<ul class="list" style="margin-top:8px">${m.events.map((e, k) => `<li><span>${dot(e.team)}${esc(pname(e.scorer))}${e.own ? ' <span class="note">(contra)</span>' : ''}${e.assist ? ` <span class="note">&nbsp;assistência: ${esc(pname(e.assist))}</span>` : ''}</span>${m.done ? '' : `<button class="btn ghost small" data-act="delEvent" data-mid="${m.id}" data-idx="${k}">Remover</button>`}</li>`).join('')}</ul>` : '<p class="empty">Nenhum gol ainda.</p>'}
     ${m.done ? `${fimTxt(m) ? `<p class="note" style="text-align:center; margin-top:4px"><b>${fimTxt(m)}</b></p>` : ''}<p class="note" style="margin-top:8px">${rotacaoTexto(m)}</p>` : `<div class="grid2" style="margin-top:12px">${evForm(m.home)}${evForm(m.away)}</div>`}
     <div class="row" style="margin-top:12px">
@@ -1099,7 +1110,7 @@
         }
 
         /* ========== Ações ========== */
-        const somenteAdmin = new Set(['openDay', 'delDay', 'attAll', 'attNone', 'draw', 'addMatch', 'addGoal', 'delEvent', 'finish', 'reopen', 'leave', 'delMatch', 'rename', 'toggleActive', 'delPlayer', 'sample', 'reset', 'sub', 'play', 'pause', 'addAssist', 'addOwn']);
+        const somenteAdmin = new Set(['openDay', 'delDay', 'attAll', 'attNone', 'draw', 'addMatch', 'addGoal', 'delEvent', 'finish', 'reopen', 'leave', 'delMatch', 'rename', 'toggleActive', 'delPlayer', 'sample', 'reset', 'sub', 'play', 'pause', 'addAssist', 'addOwn', 'addMuralha', 'delMuralha']);
 
         const act = {
             theme() { aplicarTema(document.documentElement.dataset.theme === 'escuro' ? 'claro' : 'escuro'); },
@@ -1177,11 +1188,26 @@
                 if (!sel) { alert('Selecione o jogador.'); return; }
                 m.events.push({ team: TEAMS.find(x => x !== t), scorer: sel, own: true, assist: null }); put('matches', m);
             },
+            /* MURALHA: o admin marca o jogador de linha que segurou a defesa numa partida sem sofrer gol */
+            addMuralha(b) {
+                const m = M(b.dataset.mid), t = b.dataset.team, sel = $(`#sel-${m.id}-${t}`).value;
+                if (!sel) { alert('Selecione o jogador.'); return; }
+                if (!P(sel) || P(sel).pos !== 'FIELD') { alert('A muralha é para jogador de linha. O goleiro já aparece no Paredão.'); return; }
+                const sofridos = m.events.filter(e => e.team !== t).length;
+                if (sofridos > 0) { alert(`O ${NOME[t]} já sofreu gol nesta partida. A muralha é só para quem não sofreu gol.`); return; }
+                m.muralha = m.muralha || [];
+                if (m.muralha.some(x => x.player === sel)) { alert('Este jogador já está marcado como muralha nesta partida.'); return; }
+                m.muralha.push({ team: t, player: sel }); put('matches', m);
+            },
+            delMuralha(b) { const m = M(b.dataset.mid); m.muralha.splice(+b.dataset.idx, 1); put('matches', m); },
             delEvent(b) { const m = M(b.dataset.mid); m.events.splice(+b.dataset.idx, 1); put('matches', m); },
             async finish(b) {
                 const m = M(b.dataset.mid);
                 const ms = dayMatches(m.dayId), isLast = ms[ms.length - 1].id === m.id;
                 congelar(m); /* CRONÔMETRO: para o relógio ao encerrar */
+                const antes = (m.muralha || []).length; /* MURALHA: só vale para time que terminou sem sofrer gol */
+                m.muralha = (m.muralha || []).filter(x => !m.events.some(e => e.team !== x.team));
+                if (m.muralha.length < antes) alert('Uma muralha foi removida porque o time dela sofreu gol nesta partida.');
                 m.endedAt = Date.now(); /* FINALIZAÇÃO: guarda o horário do fim */
                 m.done = true;
                 const p = plano(m);
