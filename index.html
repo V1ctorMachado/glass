@@ -952,7 +952,7 @@
             let rank = 0, prev = null;
             rows.forEach((x, i) => { if (x.v !== prev) { rank = i + 1; prev = x.v; } x.rank = rank; });
             return `<h2>Estatísticas</h2><p class="sub">Considera apenas partidas encerradas. Mínimo de ${min} jogos para aparecer. Empatados no winrate, quem jogou mais fica na frente. Saldo = gols do time menos gols sofridos nas partidas em que o jogador esteve em campo.</p>
-  <div class="card scroll">${rows.length ? `<table><thead><tr><th>#</th><th>Jogador</th><th class="num">Jogos</th><th class="num">Vitórias</th><th class="num">Empates</th><th class="num">Derrotas</th><th class="num">Gols</th><th class="num">Assistências</th><th class="num">Muralha</th><th class="num">Saldo</th><th class="num">Winrate</th></tr></thead><tbody>
+  <div class="card scroll">${rows.length ? `<table><thead><tr><th>#</th><th>Jogador</th><th class="num">Jogos</th><th class="num">Vitórias</th><th class="num">Empates</th><th class="num">Derrotas</th><th class="num">Gols</th><th class="num">Assistências</th><th class="num">Muralhas</th><th class="num">Saldo</th><th class="num">Winrate</th></tr></thead><tbody>
   ${rows.map(x => `<tr><td>${x.rank}</td><td>${esc(x.name)}${x.pos === 'GK' ? ' <span class="tag">Goleiro</span>' : ''}</td><td class="num">${x.games}</td><td class="num">${x.w}</td><td class="num">${x.d}</td><td class="num">${x.l}</td><td class="num">${x.goals}</td><td class="num">${x.assists}</td><td class="num">${x.muralhas}</td><td class="num">${sinal(x.pro - x.contra)}</td><td class="num">${pct(x.w / x.games)}</td></tr>`).join('')}
   </tbody></table>` : '<p class="empty">Sem dados ainda.</p>'}</div>`;
         }
@@ -964,9 +964,11 @@
                 const st = Object.values(computeStats()).filter(x => x.games > 0);
                 const nome = x => esc(x.name) + (x.pos === 'GK' ? ' <span class="tag">GK</span>' : '');
                 const top = (rs, campo, rot) => `<div class="card" style="margin:0"><h3>${rot}</h3>${rs.length ? `<ul class="list">${rs.map((x, i) => `<li><span>${i + 1}. ${nome(x)}</span><b>${x[campo]}</b></li>`).join('')}</ul>` : '<p class="empty">Sem dados ainda.</p>'}</div>`;
-                const topGols = st.slice().sort((a, b) => b.goals - a.goals || b.assists - a.assists || a.name.localeCompare(b.name)).slice(0, 5);
-                const topAss = st.slice().sort((a, b) => b.assists - a.assists || b.goals - a.goals || a.name.localeCompare(b.name)).slice(0, 5);
-                return `<h2>Rankings</h2><p class="sub">Os cinco maiores artilheiros e garçons da pelada — goleiros incluídos.</p>` + tabs + `<div class="grid2">${top(topGols, 'goals', 'Top 5 Gols')}${top(topAss, 'assists', 'Top 5 Assistências')}</div>`;
+                const topGols = st.filter(x => x.goals > 0).sort((a, b) => b.goals - a.goals || b.assists - a.assists || a.name.localeCompare(b.name)).slice(0, 5);
+                const topAss = st.filter(x => x.assists > 0).sort((a, b) => b.assists - a.assists || b.goals - a.goals || a.name.localeCompare(b.name)).slice(0, 5);
+                /* MURALHAS: top 5 de partidas marcadas como muralha (só jogadores de linha) */
+                const topMur = st.filter(x => x.pos === 'FIELD' && x.muralhas > 0).sort((a, b) => b.muralhas - a.muralhas || a.games - b.games || a.name.localeCompare(b.name)).slice(0, 5);
+                return `<h2>Rankings</h2><p class="sub">Os cinco maiores artilheiros, garçons e muralhas da pelada. Muralha: partidas em que o jogador foi marcado pelo admin por segurar a defesa sem o time sofrer gol.</p>` + tabs + `<div class="grid2">${top(topGols, 'goals', 'Top 5 Gols')}${top(topAss, 'assists', 'Top 5 Assistências')}${top(topMur, 'muralhas', 'Top 5 Muralhas')}</div>`;
             }
             if (statTab === 'goleiros') {
                 const gks = Object.values(computeStats()).filter(x => x.pos === 'GK' && x.gkGames > 0)
