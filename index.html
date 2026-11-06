@@ -441,6 +441,37 @@
             border-color: var(--red)
         }
 
+        /* DESTAQUES DO DIA */
+        :root { --gold: #c99a06; --silver: #8a9099; --bronze: #b0703c; }
+        :root[data-theme="escuro"] { --gold: #f2c230; --silver: #b9bec6; --bronze: #d08b52; }
+        .dest-head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; margin-bottom: 14px }
+        .dest-head h3 { margin: 0; font-size: 17px }
+        .dest-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px }
+        .dest-col-title { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px }
+        .pd { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--line); border-left: 4px solid var(--line); border-radius: 8px; margin-bottom: 8px; background: var(--bg) }
+        .pd.p1 { border-left-color: var(--gold); padding: 16px 12px }
+        .pd.p2 { border-left-color: var(--silver) }
+        .pd.p3 { border-left-color: var(--bronze) }
+        .pd-pos { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; flex-shrink: 0; color: #fff }
+        .p1 .pd-pos { background: var(--gold); width: 36px; height: 36px; font-size: 16px }
+        .p2 .pd-pos { background: var(--silver) }
+        .p3 .pd-pos { background: var(--bronze) }
+        :root[data-theme="escuro"] .pd-pos { color: #111 }
+        .pd-main { flex: 1; min-width: 0 }
+        .pd-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+        .p1 .pd-name { font-size: 17px }
+        .pd-sub { font-size: 12px; color: var(--muted); margin-top: 2px }
+        .pd-val { text-align: right; flex-shrink: 0 }
+        .pd-val b { display: block; font-size: 20px; line-height: 1.1 }
+        .p1 .pd-val b { font-size: 24px }
+        .pd-val span { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em }
+
+        .awards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin-bottom: 20px }
+        .award { border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: var(--bg) }
+        .award-title { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em }
+        .award-name { font-weight: 600; font-size: 16px; margin-top: 4px; line-height: 1.3 }
+        .award-val { font-size: 12px; color: var(--muted); margin-top: 2px }
+
         .tempo-esgotado {
             color: var(--red);
             font-weight: 700
@@ -664,23 +695,63 @@
     ${subsInfo(day)}</div>`;
         }
 
-        /* DESTAQUES DO DIA: top 3 de linha (winrate, desempate G+A) e top 3 goleiros (menos gols vazados por partida) */
+        /* DESTAQUES DO DIA: prêmios por categoria + top 3 de linha (winrate, desempate pelo saldo) + top 3 goleiros */
+        const MIN_MURALHA = 2;
+        const sinal = n => (n > 0 ? '+' : '') + n;
         function destaquesDia(day) {
-            if (!state.matches.some(m => m.dayId === day.id && m.done)) return '';
+            const feitas = state.matches.filter(m => m.dayId === day.id && m.done).length;
+            if (!feitas) return '';
             const st = Object.values(computeStats(day.id));
-            const linha = st.filter(x => x.pos === 'FIELD' && x.games > 0)
-                .map(x => ({ ...x, wr: x.w / x.games, ga: x.goals + x.assists }))
-                .sort((a, b) => b.wr - a.wr || b.ga - a.ga || b.goals - a.goals || b.games - a.games || a.name.localeCompare(b.name))
+            const campo = st.filter(x => x.pos === 'FIELD' && x.games > 0)
+                .map(x => ({ ...x, wr: x.w / x.games, saldo: x.pro - x.contra, ga: x.goals + x.assists, sofridos: x.contra / x.games }));
+            const linha = campo.slice()
+                .sort((a, b) => b.wr - a.wr || b.saldo - a.saldo || b.ga - a.ga || b.games - a.games || a.name.localeCompare(b.name))
                 .slice(0, 3);
             const gks = st.filter(x => x.pos === 'GK' && x.gkGames > 0)
                 .map(x => ({ ...x, media: x.conceded / x.gkGames }))
                 .sort((a, b) => a.media - b.media || b.gkGames - a.gkGames || a.name.localeCompare(b.name))
                 .slice(0, 3);
-            const lista = (rs, fn) => rs.length ? `<ul class="list">${rs.map((x, i) => `<li><span>${i + 1}. ${esc(x.name)}</span><span class="note">${fn(x)}</span></li>`).join('')}</ul>` : '<p class="empty">Sem dados ainda.</p>';
-            return `<div class="card"><h3>Destaques do dia</h3><div class="grid2">
-      <div><p class="tag" style="margin-bottom:4px">Top 3 linha (winrate)</p>${lista(linha, x => `<b>${pct(x.wr)}</b> · ${x.w}V em ${x.games} · ${x.goals}G ${x.assists}A`)}</div>
-      <div><p class="tag" style="margin-bottom:4px">Top 3 goleiros (menos gols vazados)</p>${lista(gks, x => `<b>${x.media.toFixed(2)}</b> por partida · ${x.conceded} em ${x.gkGames}`)}</div>
-    </div><p class="note" style="margin-top:10px">Linha: ordenado pelo winrate do dia; empate decide por gols + assistências. Goleiros: média de gols sofridos por partida no dia.</p></div>`;
+
+            const plural = (n, s, p) => `${n} ${n === 1 ? s : p}`;
+            const nomes = rs => rs.length > 3 ? rs.slice(0, 3).map(x => esc(x.name)).join(', ') + ` e mais ${rs.length - 3}` : rs.map(x => esc(x.name)).join(rs.length === 2 ? ' e ' : ', ');
+            // Vencedores de um prêmio: todos empatados no melhor valor
+            const premio = (rs, chave, maior) => {
+                if (!rs.length) return [];
+                const melhor = maior ? Math.max(...rs.map(chave)) : Math.min(...rs.map(chave));
+                return rs.filter(x => chave(x) === melhor);
+            };
+            const comGol = campo.concat(st.filter(x => x.pos === 'GK')).filter(x => x.goals > 0);
+            const comAss = campo.concat(st.filter(x => x.pos === 'GK')).filter(x => x.assists > 0);
+            const artilheiro = premio(comGol, x => x.goals, true);
+            const garcom = premio(comAss, x => x.assists, true);
+            const muralhaBase = campo.filter(x => x.games >= MIN_MURALHA);
+            let muralha = premio(muralhaBase, x => x.sofridos, false);
+            if (muralha.length > 1) muralha = premio(muralha, x => x.games, true);   // desempate: quem jogou mais
+            if (muralha.length > 1) muralha = premio(muralha, x => x.saldo, true);   // depois: maior saldo
+
+            const card = (titulo, rs, valor, vazio) => `<div class="award"><div class="award-title">${titulo}</div>
+          ${rs.length ? `<div class="award-name">${nomes(rs)}</div><div class="award-val">${valor(rs[0])}</div>` : `<div class="award-val" style="margin-top:6px">${vazio}</div>`}</div>`;
+
+            const time = id => { const t = timeDe(day, id); return t ? `${dot(t.t)}${NOME[t.t]} · ` : ''; };
+            const item = (x, i, valor, rotulo, detalhe) => `<div class="pd p${i + 1}">
+          <div class="pd-pos">${i + 1}</div>
+          <div class="pd-main"><div class="pd-name">${esc(x.name)}</div><div class="pd-sub">${time(x.id)}${detalhe}</div></div>
+          <div class="pd-val"><b>${valor}</b><span>${rotulo}</span></div></div>`;
+            const col = (titulo, rs, fn) => `<div><p class="dest-col-title">${titulo}</p>${rs.length ? rs.map(fn).join('') : '<p class="empty">Sem dados ainda.</p>'}</div>`;
+
+            return `<div class="card"><div class="dest-head"><h3>Destaques do dia</h3><span class="note">${plural(feitas, 'partida encerrada', 'partidas encerradas')}</span></div>
+      <div class="awards">
+        ${card('Artilheiro', artilheiro, x => plural(x.goals, 'gol', 'gols'), 'Nenhum gol ainda.')}
+        ${card('Garçom', garcom, x => plural(x.assists, 'assistência', 'assistências'), 'Nenhuma assistência ainda.')}
+        ${card('Muralha', muralha, x => `${x.sofridos.toFixed(1).replace('.', ',')} gols sofridos por jogo · ${plural(x.games, 'jogo', 'jogos')}`, `Precisa de ${MIN_MURALHA} jogos no dia.`)}
+      </div>
+      <div class="dest-grid">
+        ${col('Melhor desempenho (linha)', linha, (x, i) => item(x, i, pct(x.wr), 'winrate',
+                `${plural(x.w, 'vitória', 'vitórias')} em ${plural(x.games, 'jogo', 'jogos')} · saldo ${sinal(x.saldo)}${x.ga ? ` · ${x.goals}G ${x.assists}A` : ''}`))}
+        ${col('Paredão (goleiros)', gks, (x, i) => item(x, i, x.media.toFixed(1).replace('.', ','), 'gols por jogo',
+                `${plural(x.conceded, 'gol sofrido', 'gols sofridos')} em ${plural(x.gkGames, 'jogo', 'jogos')}`))}
+      </div>
+      <p class="note" style="margin-top:6px">Melhor desempenho: maior winrate; no empate, maior saldo (gols do time menos gols sofridos com o jogador em campo). Muralha: jogador de linha cujo time sofreu menos gols por jogo com ele em campo, mínimo de ${MIN_MURALHA} jogos. Paredão: goleiro com menos gols sofridos por jogo.</p></div>`;
         }
 
         /* ========== Rodízio: quem ganha fica ========== */
@@ -706,7 +777,7 @@
         /* ========== Estatísticas ========== */
         function computeStats(soDia) {
             const s = {};
-            state.players.forEach(p => s[p.id] = { id: p.id, name: p.name, pos: p.pos, active: p.active, games: 0, w: 0, d: 0, l: 0, goals: 0, assists: 0, gkGames: 0, conceded: 0, log: [] });
+            state.players.forEach(p => s[p.id] = { id: p.id, name: p.name, pos: p.pos, active: p.active, games: 0, w: 0, d: 0, l: 0, goals: 0, assists: 0, gkGames: 0, conceded: 0, pro: 0, contra: 0, log: [] });
             const order = {}; sortedDays().forEach((d, i) => order[d.id] = i);
             state.matches
                 .filter(m => m.done && dayById(m.dayId)?.teams && (!soDia || m.dayId === soDia))
@@ -720,7 +791,7 @@
                     [[m.home, ag], [m.away, hg]].forEach(([t, contra]) => { const gk = gkOf(day, m, t); if (gk && s[gk]) { s[gk].gkGames++; s[gk].conceded += contra; } });
                     [[m.home, hg, ag], [m.away, ag, hg]].forEach(([t, f, a]) => {
                         const r = f > a ? 'W' : f < a ? 'L' : 'D';
-                        roster(day, t, m).forEach(id => { const x = s[id]; if (!x) return; x.games++; x[r.toLowerCase()]++; x.log.push({ r, ga: ga[id] || 0 }); });
+                        roster(day, t, m).forEach(id => { const x = s[id]; if (!x) return; x.games++; x[r.toLowerCase()]++; x.pro += f; x.contra += a; /* SALDO */ x.log.push({ r, ga: ga[id] || 0 }); });
                     });
                 });
             return s;
@@ -824,8 +895,8 @@
                 const [hg, ag] = score(live), fora = TEAMS.find(x => x !== live.home && x !== live.away);
                 h += `<div class="card"><div class="row between"><div>${teamLabel(live.home)}<span class="score">${hg} x ${ag}</span>${teamLabel(live.away)}</div><span class="pill">Em andamento · <b data-timer="${live.id}">${timerTxt(live)}</b></span></div><p class="note" style="margin-top:6px">Aguardando: ${NOME[fora]}</p></div>`;
             }
-            h += `<div class="grid3">${TEAMS.map(x => teamCard(day, x)).join('')}</div>`;
             h += destaquesDia(day); /* DESTAQUES DO DIA */
+            h += `<div class="grid3">${TEAMS.map(x => teamCard(day, x)).join('')}</div>`;
             h += dayResults(day);
             if (next && next.date > day.date) h += `<p class="sub">Próximo dia de jogo: ${fmtDate(next.date)} (times ainda não sorteados).</p>`;
             return h;
@@ -851,9 +922,9 @@
                 .sort((a, b) => b.v - a.v || b.games - a.games || a.name.localeCompare(b.name));
             let rank = 0, prev = null;
             rows.forEach((x, i) => { if (x.v !== prev) { rank = i + 1; prev = x.v; } x.rank = rank; });
-            return `<h2>Estatísticas</h2><p class="sub">Considera apenas partidas encerradas. Mínimo de ${min} jogos para aparecer. Empatados no winrate, quem jogou mais fica na frente.</p>
-  <div class="card scroll">${rows.length ? `<table><thead><tr><th>#</th><th>Jogador</th><th class="num">Jogos</th><th class="num">Vitórias</th><th class="num">Empates</th><th class="num">Derrotas</th><th class="num">Gols</th><th class="num">Assistências</th><th class="num">Winrate</th></tr></thead><tbody>
-  ${rows.map(x => `<tr><td>${x.rank}</td><td>${esc(x.name)}${x.pos === 'GK' ? ' <span class="tag">Goleiro</span>' : ''}</td><td class="num">${x.games}</td><td class="num">${x.w}</td><td class="num">${x.d}</td><td class="num">${x.l}</td><td class="num">${x.goals}</td><td class="num">${x.assists}</td><td class="num">${pct(x.w / x.games)}</td></tr>`).join('')}
+            return `<h2>Estatísticas</h2><p class="sub">Considera apenas partidas encerradas. Mínimo de ${min} jogos para aparecer. Empatados no winrate, quem jogou mais fica na frente. Saldo = gols do time menos gols sofridos nas partidas em que o jogador esteve em campo.</p>
+  <div class="card scroll">${rows.length ? `<table><thead><tr><th>#</th><th>Jogador</th><th class="num">Jogos</th><th class="num">Vitórias</th><th class="num">Empates</th><th class="num">Derrotas</th><th class="num">Gols</th><th class="num">Assistências</th><th class="num">Saldo</th><th class="num">Winrate</th></tr></thead><tbody>
+  ${rows.map(x => `<tr><td>${x.rank}</td><td>${esc(x.name)}${x.pos === 'GK' ? ' <span class="tag">Goleiro</span>' : ''}</td><td class="num">${x.games}</td><td class="num">${x.w}</td><td class="num">${x.d}</td><td class="num">${x.l}</td><td class="num">${x.goals}</td><td class="num">${x.assists}</td><td class="num">${sinal(x.pro - x.contra)}</td><td class="num">${pct(x.w / x.games)}</td></tr>`).join('')}
   </tbody></table>` : '<p class="empty">Sem dados ainda.</p>'}</div>`;
         }
 
