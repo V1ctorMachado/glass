@@ -582,7 +582,22 @@
             return `<p class="${n > 1 ? 'flag' : 'tag'}" style="margin:4px 0 0">Selo do sorteio: ${n} clique${n > 1 ? 's' : ''} em Sortear.</p>`;
         }
         const fmtTimer = ms => { const s = Math.max(0, Math.ceil(ms / 1000)); return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'); };
-        const restante = m => m.startedAt ? DURACAO_PARTIDA - (Date.now() - m.startedAt) : null;
+        /* CRONÔMETRO: começa parado; elapsed = tempo já jogado, runningSince = quando foi dado o play */
+        function relogio(m) {
+            if (m.runningSince === undefined && m.startedAt) return { elapsed: 0, since: m.startedAt }; // partidas antigas
+            return { elapsed: m.elapsed || 0, since: m.runningSince || null };
+        }
+        const decorrido = m => { const r = relogio(m); return r.elapsed + (r.since ? Date.now() - r.since : 0); };
+        const restante = m => DURACAO_PARTIDA - decorrido(m);
+        const rodando = m => !!relogio(m).since;
+        const iniciado = m => rodando(m) || decorrido(m) > 0;
+        function timerTxt(m) {
+            if (!iniciado(m)) return fmtTimer(DURACAO_PARTIDA) + ' · aguardando início';
+            const r = restante(m);
+            if (r <= 0) return '00:00 · tempo esgotado';
+            return fmtTimer(r) + (rodando(m) ? '' : ' · pausado');
+        }
+        function congelar(m) { const r = relogio(m); m.elapsed = r.elapsed + (r.since ? Date.now() - r.since : 0); m.runningSince = null; }
 
         function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1));[a[i], a[j]] = [a[j], a[i]]; } return a; }
         function gkOf(day, m, t) {
@@ -638,6 +653,25 @@
     ${subsInfo(day)}</div>`;
         }
 
+        /* DESTAQUES DO DIA: top 3 de linha (winrate, desempate G+A) e top 3 goleiros (menos gols vazados por partida) */
+        function destaquesDia(day) {
+            if (!state.matches.some(m => m.dayId === day.id && m.done)) return '';
+            const st = Object.values(computeStats(day.id));
+            const linha = st.filter(x => x.pos === 'FIELD' && x.games > 0)
+                .map(x => ({ ...x, wr: x.w / x.games, ga: x.goals + x.assists }))
+                .sort((a, b) => b.wr - a.wr || b.ga - a.ga || b.goals - a.goals || b.games - a.games || a.name.localeCompare(b.name))
+                .slice(0, 3);
+            const gks = st.filter(x => x.pos === 'GK' && x.gkGames > 0)
+                .map(x => ({ ...x, media: x.conceded / x.gkGames }))
+                .sort((a, b) => a.media - b.media || b.gkGames - a.gkGames || a.name.localeCompare(b.name))
+                .slice(0, 3);
+            const lista = (rs, fn) => rs.length ? `<ul class="list">${rs.map((x, i) => `<li><span>${i + 1}. ${esc(x.name)}</span><span class="note">${fn(x)}</span></li>`).join('')}</ul>` : '<p class="empty">Sem dados ainda.</p>';
+            return `<div class="card"><h3>Destaques do dia</h3><div class="grid2">
+      <div><p class="tag" style="margin-bottom:4px">Top 3 linha (winrate)</p>${lista(linha, x => `<b>${pct(x.wr)}</b> · ${x.w}V em ${x.games} · ${x.goals}G ${x.assists}A`)}</div>
+      <div><p class="tag" style="margin-bottom:4px">Top 3 goleiros (menos gols vazados)</p>${lista(gks, x => `<b>${x.media.toFixed(2)}</b> por partida · ${x.conceded} em ${x.gkGames}`)}</div>
+    </div><p class="note" style="margin-top:10px">Linha: ordenado pelo winrate do dia; empate decide por gols + assistências. Goleiros: média de gols sofridos por partida no dia.</p></div>`;
+        }
+
         /* ========== Rodízio: quem ganha fica ========== */
         function streakOf(ms, idx, t) { let n = 0; for (let i = idx; i >= 0; i--) { if (ms[i].home === t || ms[i].away === t) n++; else break; } return n; }
         function plano(m) {
@@ -649,7 +683,7 @@
             const leave = sh > sa ? m.home : m.away;
             return { stay: leave === m.home ? m.away : m.home, leave, waiting, motivo: 'empate' };
         }
-        function novaPartida(dayId, home, away) { return { id: uid(), dayId, home, away, events: [], done: false, created: Date.now(), startedAt: Date.now() }; }
+        function novaPartida(dayId, home, away) { return { id: uid(), dayId, home, away, events: [], done: false, created: Date.now(), elapsed: 0, runningSince: null }; }
         function canReopen(m, ms) {
             const idx = ms.findIndex(x => x.id === m.id);
             if (!m.done) return false;
@@ -659,12 +693,12 @@
         }
 
         /* ========== Estatísticas ========== */
-        function computeStats() {
+        function computeStats(soDia) {
             const s = {};
             state.players.forEach(p => s[p.id] = { id: p.id, name: p.name, pos: p.pos, active: p.active, games: 0, w: 0, d: 0, l: 0, goals: 0, assists: 0, gkGames: 0, conceded: 0, log: [] });
             const order = {}; sortedDays().forEach((d, i) => order[d.id] = i);
             state.matches
-                .filter(m => m.done && dayById(m.dayId)?.teams)
+                .filter(m => m.done && dayById(m.dayId)?.teams && (!soDia || m.dayId === soDia))
                 .sort((a, b) => (order[a.dayId] - order[b.dayId]) || (a.created - b.created))
                 .forEach(m => {
                     const day = dayById(m.dayId), [hg, ag] = score(m), ga = {};
@@ -777,10 +811,11 @@
             h += subsInfo(day); /* SUBSTITUIÇÃO */
             const live = dayMatches(day.id).find(m => !m.done);
             if (live) {
-                const [hg, ag] = score(live), fora = TEAMS.find(x => x !== live.home && x !== live.away), r = restante(live);
-                h += `<div class="card"><div class="row between"><div>${teamLabel(live.home)}<span class="score">${hg} x ${ag}</span>${teamLabel(live.away)}</div><span class="pill">Em andamento · <b data-timer="${live.id}">${r === null ? '--:--' : fmtTimer(r)}</b></span></div><p class="note" style="margin-top:6px">Aguardando: ${NOME[fora]}</p></div>`;
+                const [hg, ag] = score(live), fora = TEAMS.find(x => x !== live.home && x !== live.away);
+                h += `<div class="card"><div class="row between"><div>${teamLabel(live.home)}<span class="score">${hg} x ${ag}</span>${teamLabel(live.away)}</div><span class="pill">Em andamento · <b data-timer="${live.id}">${timerTxt(live)}</b></span></div><p class="note" style="margin-top:6px">Aguardando: ${NOME[fora]}</p></div>`;
             }
             h += `<div class="grid3">${TEAMS.map(x => teamCard(day, x)).join('')}</div>`;
+            h += destaquesDia(day); /* DESTAQUES DO DIA */
             h += dayResults(day);
             if (next && next.date > day.date) h += `<p class="sub">Próximo dia de jogo: ${fmtDate(next.date)} (times ainda não sorteados).</p>`;
             return h;
@@ -903,6 +938,7 @@
 
                 /* SUBSTITUIÇÃO: liberada até a primeira partida; depois, só mostra o histórico */
                 if (!locked) h += subsCard(day); else h += subsInfo(day);
+                h += destaquesDia(day); /* DESTAQUES DO DIA */
 
                 const live = ms.find(m => !m.done), last = ms[ms.length - 1];
                 const tiePending = last && last.done && plano(last).tie;
@@ -918,8 +954,7 @@
         <select id="mAway">${TEAMS.map(t => `<option value="${t}" ${t === da ? 'selected' : ''}>${NOME[t]}</option>`).join('')}</select>
         <button class="btn" data-act="addMatch">${ms.length ? 'Nova partida' : 'Iniciar primeira partida'}</button></div>`;
                 } else {
-                    const r = restante(live);
-                    h += `<p class="note">Partida em andamento · cronômetro: <b data-timer="${live.id}">${r === null ? '--:--' : fmtTimer(r)}</b>. A próxima é criada automaticamente ao encerrar.</p>`;
+                    h += `<p class="note">Partida em andamento · cronômetro: <b data-timer="${live.id}">${timerTxt(live)}</b>. O cronômetro só corre depois de clicar em Iniciar. A próxima partida é criada automaticamente ao encerrar.</p>`;
                 }
                 h += '</div>';
                 h += ms.map((m, i) => matchAdmin(m, day, i, ms)).reverse().join('');
@@ -939,7 +974,8 @@
             };
             return `<div class="card"><div class="row between"><span class="tag">Partida ${i + 1}</span><span class="pill">${m.done ? 'Encerrada' : 'Em andamento'}</span></div>
     <div style="text-align:center; margin:6px 0 2px"><b>${NOME[m.home]}</b><span class="score">${hg} x ${ag}</span><b>${NOME[m.away]}</b></div>
-    ${m.done || !m.startedAt ? '' : `<div class="note" style="text-align:center; margin-bottom:8px">Cronômetro: <b data-timer="${m.id}">${fmtTimer(restante(m))}</b></div>`}
+    ${m.done ? '' : `<div class="row" style="justify-content:center; margin:4px 0 8px"><span class="note">Cronômetro: <b data-timer="${m.id}">${timerTxt(m)}</b></span>
+      ${rodando(m) ? `<button class="btn ghost small" data-act="pause" data-mid="${m.id}">Pausar</button>` : `<button class="btn small" data-act="play" data-mid="${m.id}">${iniciado(m) ? 'Retomar' : 'Iniciar'}</button>`}</div>`}
     ${m.events.length ? `<ul class="list" style="margin-top:8px">${m.events.map((e, k) => `<li><span>${dot(e.team)}${esc(pname(e.scorer))}${e.own ? ' <span class="note">(contra)</span>' : ''}${e.assist ? ` <span class="note">&nbsp;assistência: ${esc(pname(e.assist))}</span>` : ''}</span>${m.done ? '' : `<button class="btn ghost small" data-act="delEvent" data-mid="${m.id}" data-idx="${k}">Remover</button>`}</li>`).join('')}</ul>` : '<p class="empty">Nenhum gol ainda.</p>'}
     ${m.done ? `<p class="note" style="margin-top:8px">${rotacaoTexto(m)}</p>` : `<div class="grid2" style="margin-top:12px">${evForm(m.home)}${evForm(m.away)}</div>`}
     <div class="row" style="margin-top:12px">
@@ -963,7 +999,7 @@
         }
 
         /* ========== Ações ========== */
-        const somenteAdmin = new Set(['openDay', 'delDay', 'attAll', 'attNone', 'draw', 'addMatch', 'addGoal', 'delEvent', 'finish', 'reopen', 'leave', 'delMatch', 'rename', 'toggleActive', 'delPlayer', 'sample', 'reset', 'sub']);
+        const somenteAdmin = new Set(['openDay', 'delDay', 'attAll', 'attNone', 'draw', 'addMatch', 'addGoal', 'delEvent', 'finish', 'reopen', 'leave', 'delMatch', 'rename', 'toggleActive', 'delPlayer', 'sample', 'reset', 'sub', 'play', 'pause', 'addAssist', 'addOwn']);
 
         const act = {
             theme() { aplicarTema(document.documentElement.dataset.theme === 'escuro' ? 'claro' : 'escuro'); },
@@ -1006,6 +1042,17 @@
                 day.subs = [...(day.subs || []), { out, in: inn || null, team: pos.t, at: Date.now() }];
                 put('days', day);
             },
+            /* CRONÔMETRO: play e pause */
+            play(b) {
+                const m = M(b.dataset.mid); if (!m || m.done || rodando(m)) return;
+                const r = relogio(m);
+                m.elapsed = r.elapsed; m.runningSince = Date.now();
+                put('matches', m);
+            },
+            pause(b) {
+                const m = M(b.dataset.mid); if (!m || !rodando(m)) return;
+                congelar(m); put('matches', m);
+            },
             addMatch() {
                 const h = $('#mHome').value, a = $('#mAway').value;
                 if (h === a) { alert('Escolha dois times diferentes.'); return; }
@@ -1034,6 +1081,7 @@
             async finish(b) {
                 const m = M(b.dataset.mid);
                 const ms = dayMatches(m.dayId), isLast = ms[ms.length - 1].id === m.id;
+                congelar(m); /* CRONÔMETRO: para o relógio ao encerrar */
                 m.done = true;
                 const p = plano(m);
                 const ops = [['set', 'matches', m]];
@@ -1177,16 +1225,20 @@
                 });
             } catch (e) { }
         }
+        document.addEventListener('click', () => {
+            try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume(); } catch (e) { }
+        }, { once: true });
         function tickTimers() {
             document.querySelectorAll('[data-timer]').forEach(el => {
                 const m = M(el.dataset.timer);
-                if (!m || m.done || !m.startedAt) return;
-                const rest = DURACAO_PARTIDA - (Date.now() - m.startedAt);
-                if (rest <= 0) {
-                    el.textContent = '00:00 · tempo esgotado';
-                    el.classList.add('tempo-esgotado');
-                    if (!alarmeTocado.has(m.id)) { alarmeTocado.add(m.id); tocarAlarme(); }
-                } else el.textContent = fmtTimer(rest);
+                if (!m || m.done) return;
+                const rest = restante(m);
+                el.textContent = timerTxt(m);
+                el.classList.toggle('tempo-esgotado', iniciado(m) && rest <= 0);
+                if (rest <= 0 && rodando(m) && !alarmeTocado.has(m.id)) {
+                    alarmeTocado.add(m.id);
+                    if (isAdmin && rest > -10000) tocarAlarme(); /* só no aparelho do admin e só na hora */
+                }
             });
         }
         setInterval(tickTimers, 1000);
