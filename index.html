@@ -750,6 +750,9 @@
             return Math.min(NOTA.max, Math.max(NOTA.min, n));
         }
         const corNota = n => n >= 8 ? '#1d7fd8' : n >= 7 ? '#16a34a' : n >= 6.5 ? '#65a30d' : n >= 6 ? '#ca8a04' : '#dc2626';
+        /* CORES DA NOTA DO GOLEIRO: 8,0+ azul · 5,0+ verde · 4,0+ laranja · abaixo de 4,0 vermelho */
+        const corGoleiro = n => n >= 8 ? '#1d7fd8' : n >= 5 ? '#16a34a' : n >= 4 ? '#ca8a04' : '#dc2626';
+        const chipGk = n => `<span class="nota-chip" style="background:${corGoleiro(n)}">${fmt1(n)}</span>`;
         const chip = n => `<span class="nota-chip" style="background:${corNota(n)}">${fmt1(n)}</span>`;
 
         function destaquesDia(day) {
@@ -796,7 +799,7 @@
         <div><p class="dest-col-title">Paredão</p>${gks.length ? gks.slice(0, 3).map((x, i) => `<div class="pd p${i + 1}">
           <div class="pd-pos">${i + 1}</div>
           <div class="pd-main"><div class="pd-name">${esc(x.name)}</div><div class="pd-sub">${time(x.id)} · ${plural(x.conceded, 'gol sofrido', 'gols sofridos')} em ${plural(x.gkGames, 'jogo', 'jogos')} · ${fmt1(x.media)} por jogo</div></div>
-          <div class="pd-val"><b style="color:${corNota(x.nota)}">${fmt1(x.nota)}</b><span>nota</span></div></div>`).join('') : '<p class="empty">Sem goleiros no gol ainda.</p>'}</div>
+          <div class="pd-val"><b style="color:${corGoleiro(x.nota)}">${fmt1(x.nota)}</b><span>nota</span></div></div>`).join('') : '<p class="empty">Sem goleiros no gol ainda.</p>'}</div>
       </div></div>`;
         }
 
@@ -1004,7 +1007,7 @@
                 gks.forEach((x, i) => { if (x.nota !== prev) { rank = i + 1; prev = x.nota; } x.rank = rank; });
                 return `<h2>Rankings</h2><p class="sub">Goleiros ordenados pela nota (começa em 8,0 e perde 3,0 para cada gol sofrido por jogo; 1 gol por jogo = 5,0). Conta gols sofridos defendendo seu time ou emprestado a outro.</p>` + tabs +
                     `<div class="card scroll">${gks.length ? `<table><thead><tr><th>#</th><th>Goleiro</th><th class="num">Partidas no gol</th><th class="num">Gols vazados</th><th class="num">Média</th><th class="num">Nota</th></tr></thead><tbody>
-  ${gks.map(x => `<tr><td>${x.rank}</td><td>${esc(x.name)}</td><td class="num">${x.gkGames}</td><td class="num">${x.conceded}</td><td class="num">${x.media.toFixed(2)}</td><td class="num">${chip(x.nota)}</td></tr>`).join('')}
+  ${gks.map(x => `<tr><td>${x.rank}</td><td>${esc(x.name)}</td><td class="num">${x.gkGames}</td><td class="num">${x.conceded}</td><td class="num">${x.media.toFixed(2)}</td><td class="num">${chipGk(x.nota)}</td></tr>`).join('')}
   </tbody></table>` : '<p class="empty">Sem partidas com goleiros no gol ainda.</p>'}</div>`;
             }
             const rows = Object.values(computeStats()).filter(x => x.pos === 'FIELD' && x.active && x.games >= s.minGames).map(x => {
