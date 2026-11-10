@@ -461,6 +461,12 @@
         .tp-team { font-size: 11px; color: var(--muted) }
         .tp-val { font-size: 20px; font-weight: 700; line-height: 1 }
 
+        /* FINALIZAR DIA / EDITAR PARTIDA */
+        .btn-ic { display: inline-flex; align-items: center; gap: 6px }
+        .btn-ic svg { flex-shrink: 0 }
+        .card.editando { border-color: var(--text) }
+        .banner-fim { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; border-left: 4px solid var(--green) }
+
         .evbtn.og {
             color: var(--red);
             border-color: var(--red)
@@ -575,6 +581,7 @@
         const loaded = { players: false, days: false, matches: false, config: false };
         let loadError = null, authUser = null, isAdmin = false, authMsg = '';
         let view = 'teams', openDay = null, statTab = 'observacao';
+        let editando = null; /* EDITAR PARTIDA: id da partida encerrada aberta para edição */
 
         if (!firebaseConfig.projectId) {
             $('#app').innerHTML = `<div class="card"><h3>Configuração pendente</h3><p class="sub" style="margin:0">Preencha o objeto <b>firebaseConfig</b> no código com os dados do seu projeto Firebase para começar.</p></div>`;
@@ -674,7 +681,10 @@
         }
         function roster(day, team, m) { if (!day.teams) return []; const r = day.teams[team].slice(); const gk = m ? gkOf(day, m, team) : (day.gk && day.gk[team]); if (gk) r.unshift(gk); return r; }
         function score(m) { return [m.events.filter(e => e.team === m.home).length, m.events.filter(e => e.team === m.away).length]; }
+        const LAPIS = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+        const horaMin = ts => new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
         function dayStatus(d) {
+            if (d.closed) { const f = state.matches.filter(m => m.dayId === d.id && m.done).length; return `Finalizado · ${f} partida${f === 1 ? '' : 's'}`; }
             const n = state.matches.filter(m => m.dayId === d.id && m.done).length;
             return n ? `${n} partida${n > 1 ? 's' : ''} jogada${n > 1 ? 's' : ''}` : d.teams ? 'Times sorteados' : 'Agendado';
         }
@@ -725,6 +735,15 @@
         const fmt1 = n => n.toFixed(1).replace('.', ',');
         /* NOTA: todo mundo começa com 6,0 e cada lance soma ou tira pontos. Para ajustar, troque os números. */
         const NOTA = { base: 6.0, gol: 1.0, assist: 0.5, muralha: 0.75, vitoria: 0.3, derrota: -0.3, golContra: -0.5, min: 3.0, max: 10.0 };
+        /* NOTA DO GOLEIRO: começa em 8,0 e perde 3,0 para cada gol sofrido por jogo (1 gol por jogo = 5,0).
+           Gol, assistência e gol contra do goleiro valem o mesmo que para o jogador de linha. */
+        const NOTA_GOLEIRO = { base: 8.0, golSofridoPorJogo: -3.0 };
+        function notaGoleiro(x) {
+            const media = x.gkGames ? x.conceded / x.gkGames : 0;
+            const n = NOTA_GOLEIRO.base + NOTA_GOLEIRO.golSofridoPorJogo * media
+                + NOTA.gol * x.goals + NOTA.assist * x.assists + NOTA.golContra * x.golsContra;
+            return Math.min(NOTA.max, Math.max(NOTA.min, n));
+        }
         function notaJogador(x) {
             const n = NOTA.base + NOTA.gol * x.goals + NOTA.assist * x.assists + NOTA.muralha * x.muralhas
                 + NOTA.vitoria * x.w + NOTA.derrota * x.l + NOTA.golContra * x.golsContra;
@@ -741,8 +760,8 @@
             const todos = campo.concat(st.filter(x => x.pos === 'GK' && x.games > 0).map(x => ({ ...x, nota: notaJogador(x) })));
             const ranking = campo.slice().sort((a, b) => b.nota - a.nota || b.goals - a.goals || b.muralhas - a.muralhas || b.w - a.w || a.name.localeCompare(b.name));
             const gks = st.filter(x => x.pos === 'GK' && x.gkGames > 0)
-                .map(x => ({ ...x, media: x.conceded / x.gkGames }))
-                .sort((a, b) => a.media - b.media || b.gkGames - a.gkGames || a.name.localeCompare(b.name));
+                .map(x => ({ ...x, media: x.conceded / x.gkGames, nota: notaGoleiro(x) }))
+                .sort((a, b) => b.nota - a.nota || a.media - b.media || b.gkGames - a.gkGames || a.name.localeCompare(b.name));
 
             const plural = (n, s, p) => `${n} ${n === 1 ? s : p}`;
             const time = id => { const t = timeDe(day, id); return t ? `${dot(t.t)}${NOME[t.t]}` : ''; };
@@ -776,8 +795,8 @@
           ${ranking.length > 3 ? `<details class="notas-todas"><summary>Ver a nota de todos (${ranking.length} jogadores)</summary><ul class="list" style="margin-top:6px">${ranking.map((x, i) => `<li><span>${i + 1}. ${esc(x.name)} <span class="note">&nbsp;${resumo(x)}</span></span>${chip(x.nota)}</li>`).join('')}</ul></details>` : ''}</div>
         <div><p class="dest-col-title">Paredão</p>${gks.length ? gks.slice(0, 3).map((x, i) => `<div class="pd p${i + 1}">
           <div class="pd-pos">${i + 1}</div>
-          <div class="pd-main"><div class="pd-name">${esc(x.name)}</div><div class="pd-sub">${time(x.id)} · ${plural(x.conceded, 'gol sofrido', 'gols sofridos')} em ${plural(x.gkGames, 'jogo', 'jogos')}</div></div>
-          <div class="pd-val"><b>${fmt1(x.media)}</b><span>por jogo</span></div></div>`).join('') : '<p class="empty">Sem goleiros no gol ainda.</p>'}</div>
+          <div class="pd-main"><div class="pd-name">${esc(x.name)}</div><div class="pd-sub">${time(x.id)} · ${plural(x.conceded, 'gol sofrido', 'gols sofridos')} em ${plural(x.gkGames, 'jogo', 'jogos')} · ${fmt1(x.media)} por jogo</div></div>
+          <div class="pd-val"><b style="color:${corNota(x.nota)}">${fmt1(x.nota)}</b><span>nota</span></div></div>`).join('') : '<p class="empty">Sem goleiros no gol ainda.</p>'}</div>
       </div></div>`;
         }
 
@@ -940,7 +959,7 @@
 
         function viewSchedule() {
             const t = todayStr(), ds = sortedDays();
-            const encerrado = d => { const ms = state.matches.filter(m => m.dayId === d.id); return ms.length > 0 && ms.every(m => m.done); };
+            const encerrado = d => { if (d.closed) return true; const ms = state.matches.filter(m => m.dayId === d.id); return ms.length > 0 && ms.every(m => m.done); };
             const past = ds.filter(d => d.date < t || encerrado(d)).reverse();
             const up = ds.filter(d => !(d.date < t || encerrado(d)));
             return `<h2>Agenda</h2><p class="sub">Próximos dias de jogo e resultados anteriores.</p>
@@ -979,13 +998,13 @@
             }
             if (statTab === 'goleiros') {
                 const gks = Object.values(computeStats()).filter(x => x.pos === 'GK' && x.gkGames > 0)
-                    .map(x => ({ ...x, media: x.conceded / x.gkGames }))
-                    .sort((a, b) => a.media - b.media || b.gkGames - a.gkGames || a.name.localeCompare(b.name));
+                    .map(x => ({ ...x, media: x.conceded / x.gkGames, nota: notaGoleiro(x) }))
+                    .sort((a, b) => b.nota - a.nota || a.media - b.media || b.gkGames - a.gkGames || a.name.localeCompare(b.name));
                 let rank = 0, prev = null;
-                gks.forEach((x, i) => { if (x.media !== prev) { rank = i + 1; prev = x.media; } x.rank = rank; });
-                return `<h2>Rankings</h2><p class="sub">Goleiros ordenados pela média de gols vazados por partida — quanto menor, melhor. Conta gols sofridos defendendo seu time ou emprestado a outro.</p>` + tabs +
-                    `<div class="card scroll">${gks.length ? `<table><thead><tr><th>#</th><th>Goleiro</th><th class="num">Partidas no gol</th><th class="num">Gols vazados</th><th class="num">Média</th></tr></thead><tbody>
-  ${gks.map(x => `<tr><td>${x.rank}</td><td>${esc(x.name)}</td><td class="num">${x.gkGames}</td><td class="num">${x.conceded}</td><td class="num">${x.media.toFixed(2)}</td></tr>`).join('')}
+                gks.forEach((x, i) => { if (x.nota !== prev) { rank = i + 1; prev = x.nota; } x.rank = rank; });
+                return `<h2>Rankings</h2><p class="sub">Goleiros ordenados pela nota (começa em 8,0 e perde 3,0 para cada gol sofrido por jogo; 1 gol por jogo = 5,0). Conta gols sofridos defendendo seu time ou emprestado a outro.</p>` + tabs +
+                    `<div class="card scroll">${gks.length ? `<table><thead><tr><th>#</th><th>Goleiro</th><th class="num">Partidas no gol</th><th class="num">Gols vazados</th><th class="num">Média</th><th class="num">Nota</th></tr></thead><tbody>
+  ${gks.map(x => `<tr><td>${x.rank}</td><td>${esc(x.name)}</td><td class="num">${x.gkGames}</td><td class="num">${x.conceded}</td><td class="num">${x.media.toFixed(2)}</td><td class="num">${chip(x.nota)}</td></tr>`).join('')}
   </tbody></table>` : '<p class="empty">Sem partidas com goleiros no gol ainda.</p>'}</div>`;
             }
             const rows = Object.values(computeStats()).filter(x => x.pos === 'FIELD' && x.active && x.games >= s.minGames).map(x => {
@@ -1040,7 +1059,8 @@
             const ms = dayMatches(day.id), locked = ms.length > 0;
             const nGks = day.attendees.filter(id => P(id) && P(id).pos === 'GK').length;
             let h = `<div class="row between" style="margin-bottom:20px"><div><h2>${fmtDate(day.date)}</h2><p class="sub" style="margin:0">${[day.time, day.place].filter(Boolean).map(esc).join(' - ') || 'Sem horário ou local definido'}</p></div>
-    <div class="row"><button class="btn ghost" data-act="closeDay">Voltar</button><button class="btn ghost" data-act="delDay" data-id="${day.id}">Excluir dia</button></div></div>`;
+    <div class="row"><button class="btn ghost" data-act="closeDay">Voltar</button>${!day.closed && ms.some(m => m.done) ? '<button class="btn" data-act="finalizeDay">Finalizar dia</button>' : ''}<button class="btn ghost" data-act="delDay" data-id="${day.id}">Excluir dia</button></div></div>`;
+            if (day.closed) h += `<div class="card banner-fim"><div><b>Dia finalizado</b><span class="note"> · às ${horaMin(day.closedAt)} · ${ms.filter(m => m.done).length} partidas</span><div class="note">Para corrigir um resultado, use o botão Editar (lápis) na partida.</div></div><button class="btn ghost small" data-act="reopenDay">Reabrir dia</button></div>`;
 
             h += `<div class="card"><h3>Presença</h3><p class="sub" id="attCount">${attText(day)}</p>
     ${locked ? '<p class="sub">A presença está bloqueada porque já existem partidas registradas.</p>' : '<div class="row" style="margin-bottom:12px"><button class="btn ghost small" data-act="attAll">Selecionar todos</button><button class="btn ghost small" data-act="attNone">Limpar</button></div>'}
@@ -1061,7 +1081,9 @@
                 const live = ms.find(m => !m.done), last = ms[ms.length - 1];
                 const tiePending = last && last.done && plano(last).tie;
                 h += `<div class="card"><h3>Partidas</h3><p class="sub">Regra de rodízio: quem vence permanece e enfrenta o time que estava fora. Em caso de empate, sai o time que está há mais partidas seguidas em campo. Se os dois entraram juntos, o administrador escolhe quem sai.</p>`;
-                if (tiePending) {
+                if (day.closed) {
+                    h += '<p class="note">Dia finalizado. Não é possível criar novas partidas; reabra o dia se precisar.</p>';
+                } else if (tiePending) {
                     h += `<p style="margin-bottom:8px">Empate na partida entre ${NOME[last.home]} e ${NOME[last.away]}. Quem sai?</p><div class="row">
         <button class="btn ghost" data-act="leave" data-mid="${last.id}" data-team="${last.home}">Sai ${NOME[last.home]}</button>
         <button class="btn ghost" data-act="leave" data-mid="${last.id}" data-team="${last.away}">Sai ${NOME[last.away]}</button></div>`;
@@ -1082,6 +1104,7 @@
 
         function matchAdmin(m, day, i, ms) {
             const [hg, ag] = score(m), isLast = i === ms.length - 1;
+            const edit = m.done && editando === m.id, livre = !m.done || edit; /* livre = pode lançar e remover lances */
             const evForm = t => {
                 const gk = gkOf(day, m, t);
                 const opts = roster(day, t, m).map(id => `<option value="${id}">${esc(pname(id))}</option>`).join('');
@@ -1090,16 +1113,21 @@
       <select id="sel-${m.id}-${t}" style="width:100%; margin-bottom:8px"><option value="">Jogador...</option>${opts}</select>
       <div class="evgrid"><button class="evbtn gol" data-act="addGoal" data-mid="${m.id}" data-team="${t}">Gol</button><button class="evbtn ass" data-act="addAssist" data-mid="${m.id}" data-team="${t}">Assist.</button><button class="evbtn og" data-act="addOwn" data-mid="${m.id}" data-team="${t}">Contra</button><button class="evbtn mur" data-act="addMuralha" data-mid="${m.id}" data-team="${t}">Muralha</button></div></div>`;
             };
-            return `<div class="card"><div class="row between"><span class="tag">Partida ${i + 1}</span><span class="pill">${m.done ? 'Encerrada' : 'Em andamento'}</span></div>
+            return `<div class="card${edit ? ' editando' : ''}"><div class="row between"><span class="tag">Partida ${i + 1}</span><span class="pill">${edit ? 'Editando' : m.done ? 'Encerrada' : 'Em andamento'}</span></div>
     <div style="text-align:center; margin:6px 0 2px"><b>${NOME[m.home]}</b><span class="score">${hg} x ${ag}</span><b>${NOME[m.away]}</b></div>
     ${m.done ? '' : `<div class="row" style="justify-content:center; margin:4px 0 8px"><span class="note">Cronômetro: <b data-timer="${m.id}">${timerTxt(m)}</b></span>
       ${rodando(m) ? `<button class="btn ghost small" data-act="pause" data-mid="${m.id}">Pausar</button>` : `<button class="btn small" data-act="play" data-mid="${m.id}">${iniciado(m) ? 'Retomar' : 'Iniciar'}</button>`}</div>`}
-    ${(m.muralha || []).length ? `<p class="note" style="margin-top:8px">Muralha: ${m.muralha.map((x, k) => `${dot(x.team)}${esc(pname(x.player))}${m.done ? '' : ` <button class="btn ghost small" data-act="delMuralha" data-mid="${m.id}" data-idx="${k}">Remover</button>`}`).join(' &nbsp; ')}</p>` : ''}
-    ${m.events.length ? `<ul class="list" style="margin-top:8px">${m.events.map((e, k) => `<li><span>${dot(e.team)}${esc(pname(e.scorer))}${e.own ? ' <span class="note">(contra)</span>' : ''}${e.assist ? ` <span class="note">&nbsp;assistência: ${esc(pname(e.assist))}</span>` : ''}</span>${m.done ? '' : `<button class="btn ghost small" data-act="delEvent" data-mid="${m.id}" data-idx="${k}">Remover</button>`}</li>`).join('')}</ul>` : '<p class="empty">Nenhum gol ainda.</p>'}
-    ${m.done ? `${fimTxt(m) ? `<p class="note" style="text-align:center; margin-top:4px"><b>${fimTxt(m)}</b></p>` : ''}<p class="note" style="margin-top:8px">${rotacaoTexto(m)}</p>` : `<div class="grid2" style="margin-top:12px">${evForm(m.home)}${evForm(m.away)}</div>`}
+    ${(m.muralha || []).length ? `<p class="note" style="margin-top:8px">Muralha: ${m.muralha.map((x, k) => `${dot(x.team)}${esc(pname(x.player))}${!livre ? '' : ` <button class="btn ghost small" data-act="delMuralha" data-mid="${m.id}" data-idx="${k}">Remover</button>`}`).join(' &nbsp; ')}</p>` : ''}
+    ${m.events.length ? `<ul class="list" style="margin-top:8px">${m.events.map((e, k) => `<li><span>${dot(e.team)}${esc(pname(e.scorer))}${e.own ? ' <span class="note">(contra)</span>' : ''}${e.assist ? ` <span class="note">&nbsp;assistência: ${esc(pname(e.assist))}</span>` : ''}</span>${!livre ? '' : `<button class="btn ghost small" data-act="delEvent" data-mid="${m.id}" data-idx="${k}">Remover</button>`}</li>`).join('')}</ul>` : '<p class="empty">Nenhum gol ainda.</p>'}
+    ${m.done ? `${fimTxt(m) ? `<p class="note" style="text-align:center; margin-top:4px"><b>${fimTxt(m)}</b></p>` : ''}${edit ? '' : `<p class="note" style="margin-top:8px">${rotacaoTexto(m)}</p>`}` : ''}
+    ${edit ? '<p class="flag" style="margin-top:8px">Modo edição: as mudanças são salvas na hora e atualizam as estatísticas. O rodízio das partidas seguintes não muda.</p>' : ''}
+    ${livre ? `<div class="grid2" style="margin-top:12px">${evForm(m.home)}${evForm(m.away)}</div>` : ''}
     <div class="row" style="margin-top:12px">
-      ${m.done ? (canReopen(m, ms) ? `<button class="btn ghost small" data-act="reopen" data-mid="${m.id}">Reabrir</button>` : '') : `<button class="btn small" data-act="finish" data-mid="${m.id}">Encerrar partida</button>`}
-      ${isLast ? `<button class="btn ghost small" data-act="delMatch" data-mid="${m.id}">Excluir partida</button>` : ''}
+      ${!m.done ? `<button class="btn small" data-act="finish" data-mid="${m.id}">Encerrar partida</button>`
+                : edit ? `<button class="btn small" data-act="editMatch" data-mid="${m.id}">Concluir edição</button>`
+                : `<button class="btn ghost small btn-ic" data-act="editMatch" data-mid="${m.id}" title="Editar gols, assistências e muralhas">${LAPIS} Editar</button>`}
+      ${m.done && !edit && !day.closed && canReopen(m, ms) ? `<button class="btn ghost small" data-act="reopen" data-mid="${m.id}">Reabrir</button>` : ''}
+      ${isLast && !day.closed && !edit ? `<button class="btn ghost small" data-act="delMatch" data-mid="${m.id}">Excluir partida</button>` : ''}
     </div></div>`;
         }
 
@@ -1118,13 +1146,30 @@
         }
 
         /* ========== Ações ========== */
-        const somenteAdmin = new Set(['openDay', 'delDay', 'attAll', 'attNone', 'draw', 'addMatch', 'addGoal', 'delEvent', 'finish', 'reopen', 'leave', 'delMatch', 'rename', 'toggleActive', 'delPlayer', 'sample', 'reset', 'sub', 'play', 'pause', 'addAssist', 'addOwn', 'addMuralha', 'delMuralha']);
+        const somenteAdmin = new Set(['openDay', 'delDay', 'attAll', 'attNone', 'draw', 'addMatch', 'addGoal', 'delEvent', 'finish', 'reopen', 'leave', 'delMatch', 'rename', 'toggleActive', 'delPlayer', 'sample', 'reset', 'sub', 'play', 'pause', 'addAssist', 'addOwn', 'addMuralha', 'delMuralha', 'finalizeDay', 'reopenDay', 'editMatch']);
 
         const act = {
             theme() { aplicarTema(document.documentElement.dataset.theme === 'escuro' ? 'claro' : 'escuro'); },
             logout() { signOut(auth); openDay = null; },
             openDay(b) { openDay = b.dataset.id; render(); window.scrollTo(0, 0); },
-            closeDay() { openDay = null; render(); },
+            closeDay() { openDay = null; editando = null; render(); },
+            /* FINALIZAR DIA */
+            async finalizeDay() {
+                const day = curDay(), ms = dayMatches(day.id), abertas = ms.filter(m => !m.done);
+                const vazias = abertas.filter(m => !m.events.length && !(m.muralha || []).length && !iniciado(m));
+                if (abertas.length > vazias.length) { alert('Há uma partida em andamento. Encerre a partida antes de finalizar o dia.'); return; }
+                const feitas = ms.filter(m => m.done).length;
+                if (!confirm(`Finalizar o dia com ${feitas} partida${feitas === 1 ? '' : 's'} encerrada${feitas === 1 ? '' : 's'}?${vazias.length ? ' A próxima partida que ainda não começou será descartada.' : ''}`)) return;
+                day.closed = true; day.closedAt = Date.now(); editando = null;
+                await lote([...vazias.map(m => ['del', 'matches', m.id]), ['set', 'days', day]]);
+            },
+            reopenDay() {
+                const day = curDay();
+                if (!confirm('Reabrir o dia? Você poderá criar novas partidas de novo.')) return;
+                day.closed = false; day.closedAt = null; put('days', day);
+            },
+            /* EDITAR PARTIDA: abre ou fecha a edição de uma partida encerrada */
+            editMatch(b) { editando = editando === b.dataset.mid ? null : b.dataset.mid; render(); },
             delDay(b) {
                 const id = b.dataset.id, partidas = state.matches.filter(m => m.dayId === id);
                 if (!confirm(partidas.length ? `Excluir este dia e as ${partidas.length} partida(s) registradas (com os gols)?` : 'Excluir este dia de jogo?')) return;
@@ -1338,7 +1383,7 @@
         /* ========== Eventos e renderização ========== */
         document.addEventListener('click', e => {
             const b = e.target.closest('[data-act],[data-view],[data-tab]'); if (!b) return;
-            if (b.dataset.view) { view = b.dataset.view; openDay = null; render(); return; }
+            if (b.dataset.view) { view = b.dataset.view; openDay = null; editando = null; render(); return; }
             if (b.dataset.tab) { statTab = b.dataset.tab; render(); return; }
             const a = b.dataset.act;
             if (somenteAdmin.has(a) && !isAdmin) return;
